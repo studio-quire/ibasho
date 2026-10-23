@@ -1,0 +1,324 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 19:20:00 +0000
+Subject: [PATCH 24/25] Never take focus: the window appears without activation
+
+The viewer often runs on the desktop of a person using it for something
+else. IbashoNoActivate (on at every launch, not saved; set up before the
+splash screen) keeps the viewer from ever activating or raising its own
+window: it appears without activation just behind the window in use (behind
+everything if that's topmost or unknown), there's no splash screen and no
+taskbar flashing, restore and resize don't activate, minimizing doesn't
+activate the next window, bringToFront and focusClient do nothing, and a
+maximized start fills the screen's work area instead of maximizing (which
+always activates). The window renders as before; the person can still click
+it or Alt+Tab to it. External browser launches ask for no activation too.
+---
+ doc/IBASHO-CHANGES.txt                  | 14 +++---
+ indra/llwindow/llwindowwin32.cpp        | 67 ++++++++++++++++++++++---
+ indra/newview/app_settings/settings.xml | 13 ++++-
+ indra/newview/ibashoagent.cpp           | 17 +++++++
+ indra/newview/ibashohooks.h             |  3 ++
+ indra/newview/llappviewer.cpp           |  7 ++-
+ 6 files changed, 106 insertions(+), 15 deletions(-)
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+index a2974a0..731f2fa 100644
+--- a/doc/IBASHO-CHANGES.txt
++++ b/doc/IBASHO-CHANGES.txt
+@@ -19,8 +19,9 @@ indra/llui/llfloater.cpp
+     Modified for Ibasho (2026-10-10, 2026-10-22): a hook that lets newview hold a floater hidden
+     (IbashoAgent streamUI).
+ indra/llwindow/llwindowwin32.cpp
+-    Modified for Ibasho (2026-10-11, 2026-10-22): spectator mode (the real mouse and keyboard
+-    don't reach the viewer while LEAP drives it); the splash says Ibasho.
++    Modified for Ibasho (2026-10-11, 2026-10-22, 2026-10-23): spectator mode (the real mouse and
++    keyboard don't reach the viewer while LEAP drives it); the splash says Ibasho; the viewer never
++    activates or raises its own window (IbashoNoActivate).
+ indra/media_plugins/CMakeLists.txt
+     Modified for Ibasho (2026-10-23): no LibVLC media plugin (VLC is GPL; the CEF plugin plays
+     media).
+@@ -32,9 +33,9 @@ indra/newview/VIEWER_VERSION.txt
+ indra/newview/app_settings/settings.xml
+     Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23): settings for the Ibasho
+     LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost,
+-    IbashoSpectator, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy); Report
+-    Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up
+-    (UpdaterShowReleaseNotes).
++    IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy,
++    IbashoAllowCurrencyBuy); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release
++    notes pop up (UpdaterShowReleaseNotes).
+ indra/newview/app_settings/settings_per_account.xml
+     Modified for Ibasho (2026-10-22): chat and IM transcripts off by default (LogNearbyChat,
+     KeepConversationLogTranscripts).
+@@ -70,7 +71,8 @@ indra/newview/licenses-win32.txt
+     perftools) and OpenJPEG's license added (a data file, packaged as licenses.txt).
+ indra/newview/llappviewer.cpp
+     Modified for Ibasho (2026-10-22, 2026-10-23): the app folder is named Ibasho; the splash text
+-    uses the app name; no update checks with Linden Lab's update service; no LibVLC.
++    uses the app name; no update checks with Linden Lab's update service; no LibVLC; the window
++    never takes focus by itself (IbashoNoActivate, set up before the splash).
+ indra/newview/llappviewer.h
+     Modified for Ibasho (2026-10-22): the window class is Ibasho's own.
+ indra/newview/llappviewerwin32.cpp
+diff --git a/indra/llwindow/llwindowwin32.cpp b/indra/llwindow/llwindowwin32.cpp
+index c70af60..b1eb6c4 100644
+--- a/indra/llwindow/llwindowwin32.cpp
++++ b/indra/llwindow/llwindowwin32.cpp
+@@ -23,8 +23,9 @@
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
+  *
+- * Modified for Ibasho (2026-10-11, 2026-10-22): spectator mode (the real mouse and keyboard don't
+- * reach the viewer while LEAP drives it); the splash says Ibasho. Changes are marked "Ibasho".
++ * Modified for Ibasho (2026-10-11, 2026-10-22, 2026-10-23): spectator mode (the real mouse and keyboard
++ * don't reach the viewer while LEAP drives it); the splash says Ibasho; the viewer never activates or
++ * raises its own window (IbashoNoActivate). Changes are marked "Ibasho".
+  */
+ 
+ #include "linden_common.h"
+@@ -244,6 +245,40 @@ static bool ibasho_spectator_eats(HWND h_wnd, UINT u_msg, WPARAM w_param, LPARAM
+         return false;
+     }
+ }
++
++// No activation (2026-10-23, Claude Opus 5.5)
++// The viewer often runs on the desktop of a person who is using it for something else (a game, their work).
++// While set (newview mirrors the IbashoNoActivate setting into it, before the splash screen), the viewer never
++// activates its own window or raises it over theirs: the window appears without activation just behind the
++// window in use, there's no splash screen and no taskbar flashing, and a maximized start fills the screen's work
++// area instead (maximizing always activates). The person can still click it, Alt+Tab to it and so on.
++std::atomic<bool> gIbashoNoActivate{ false };
++
++// Shows h_wnd without activating it, just below the application in use, so it covers none of it.
++static void ibasho_show_quietly(HWND h_wnd)
++{
++    HWND in_use = GetForegroundWindow();
++    if (in_use)
++    {
++        in_use = GetAncestor(in_use, GA_ROOTOWNER); // its dialogs sit above their owner: go below them all
++    }
++    DWORD pid = 0;
++    if (in_use)
++    {
++        GetWindowThreadProcessId(in_use, &pid);
++    }
++    UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW;
++    HWND after = HWND_BOTTOM; // nothing in use that we can tell, or a topmost one: behind everything
++    if (pid == GetCurrentProcessId())
++    {
++        flags |= SWP_NOZORDER; // the person is using the viewer already
++    }
++    else if (in_use && !(GetWindowLongPtr(in_use, GWL_EXSTYLE) & WS_EX_TOPMOST))
++    {
++        after = in_use;
++    }
++    SetWindowPos(h_wnd, after, 0, 0, 0, 0, flags);
++}
+ // </Ibasho>
+ 
+ HGLRC SafeCreateContext(HDC &hdc)
+@@ -1007,6 +1042,7 @@ LLWindowWin32::~LLWindowWin32()
+ void LLWindowWin32::show()
+ {
+     LL_DEBUGS("Window") << "Setting window to show" << LL_ENDL;
++    if (gIbashoNoActivate) { ibasho_show_quietly(mWindowHandle); return; } // Ibasho
+     if (gIbashoSpectator) { ShowWindow(mWindowHandle, SW_SHOWNA); return; } // Ibasho spectator: don't take focus
+     ShowWindow(mWindowHandle, SW_SHOW);
+     SetForegroundWindow(mWindowHandle);
+@@ -1024,12 +1060,13 @@ void LLWindowWin32::minimize()
+ {
+     setMouseClipping(false);
+     showCursor();
+-    ShowWindow(mWindowHandle, SW_MINIMIZE);
++    ShowWindow(mWindowHandle, gIbashoNoActivate ? SW_SHOWMINNOACTIVE : SW_MINIMIZE); // Ibasho: SW_MINIMIZE activates the next window
+ }
+ 
+ //virtual
+ void LLWindowWin32::restore()
+ {
++    if (gIbashoNoActivate) { ShowWindow(mWindowHandle, SW_SHOWNOACTIVATE); return; } // Ibasho
+     ShowWindow(mWindowHandle, SW_RESTORE);
+     SetForegroundWindow(mWindowHandle);
+     SetFocus(mWindowHandle);
+@@ -1202,6 +1239,19 @@ bool LLWindowWin32::maximize()
+ 
+     mWindowThread->post([=]
+         {
++            // <Ibasho> maximizing activates (and shows) the window: fill the screen's work area instead
++            MONITORINFO monitor = { sizeof(MONITORINFO) };
++            if (gIbashoNoActivate)
++            {
++                if (GetMonitorInfo(MonitorFromWindow(mWindowHandle, MONITOR_DEFAULTTONEAREST), &monitor))
++                {
++                    const RECT& r = monitor.rcWork;
++                    SetWindowPos(mWindowHandle, NULL, r.left, r.top, r.right - r.left, r.bottom - r.top,
++                                 SWP_NOZORDER | SWP_NOACTIVATE);
++                }
++                return;
++            }
++            // </Ibasho>
+             WINDOWPLACEMENT placement;
+             placement.length = sizeof(WINDOWPLACEMENT);
+ 
+@@ -1272,6 +1322,8 @@ bool LLWindowWin32::setSizeImpl(const LLCoordScreen size)
+             if (GetWindowPlacement(mWindowHandle, &placement))
+             {
+                 placement.showCmd = SW_RESTORE;
++                if (gIbashoNoActivate) // Ibasho: SW_RESTORE activates (and shows) the window
++                    placement.showCmd = IsWindowVisible(mWindowHandle) ? SW_SHOWNOACTIVATE : SW_HIDE;
+                 SetWindowPlacement(mWindowHandle, &placement);
+             }
+         });
+@@ -3963,6 +4015,7 @@ bool LLWindowWin32::getClientRectInScreenSpace( RECT* rectp )
+ 
+ void LLWindowWin32::flashIcon(F32 seconds)
+ {
++    if (gIbashoNoActivate) return; // Ibasho: no taskbar flashing
+     mWindowThread->post([=]()
+         {
+             FLASHWINFO flash_info;
+@@ -4224,6 +4277,8 @@ LLSplashScreenWin32::~LLSplashScreenWin32()
+ 
+ void LLSplashScreenWin32::showImpl()
+ {
++    if (gIbashoNoActivate) return; // Ibasho: no splash, which would pop up over whatever the person is doing
++
+     // This appears to work.  ???
+     HINSTANCE hinst = GetModuleHandle(NULL);
+ 
+@@ -4381,7 +4436,7 @@ void LLWindowWin32::spawnWebBrowser(const std::string& escaped_url, bool async)
+     {
+         sei.fMask = SEE_MASK_ASYNCOK;
+     }
+-    sei.nShow = SW_SHOWNORMAL;
++    sei.nShow = gIbashoNoActivate ? SW_SHOWNOACTIVATE : SW_SHOWNORMAL; // Ibasho: a request (browsers may not honour it)
+     sei.lpVerb = L"open";
+     sei.lpFile = url_utf16.c_str();
+     ShellExecuteEx( &sei );
+@@ -4444,7 +4499,7 @@ void *LLWindowWin32::getPlatformWindow()
+ 
+ void LLWindowWin32::bringToFront()
+ {
+-    if (gIbashoSpectator) return; // Ibasho spectator
++    if (gIbashoSpectator || gIbashoNoActivate) return; // Ibasho
+     mWindowThread->post([=]()
+         {
+             BringWindowToTop(mWindowHandle);
+@@ -4454,7 +4509,7 @@ void LLWindowWin32::bringToFront()
+ // set (OS) window focus back to the client
+ void LLWindowWin32::focusClient()
+ {
+-    if (gIbashoSpectator) return; // Ibasho spectator
++    if (gIbashoSpectator || gIbashoNoActivate) return; // Ibasho
+     mWindowThread->post([=]()
+         {
+             SetFocus(mWindowHandle);
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index 0e20aa8..9869f46 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" ?>
+-<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes). Changes are marked "Ibasho". -->
++<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes). Changes are marked "Ibasho". -->
+ <llsd xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:noNamespaceSchemaLocation="llsd.xsd">
+ <map>
+@@ -11949,6 +11949,17 @@
+       <key>Value</key>
+       <integer>1</integer>
+     </map>
++    <key>IbashoNoActivate</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: the viewer never activates or raises its own window: it appears behind the window in use, without a splash screen or taskbar flashing (you can still click it, Alt+Tab to it and so on). Not saved, so every launch starts on unless the command line says otherwise (--set IbashoNoActivate 0).</string>
++      <key>Persist</key>
++      <integer>0</integer>
++      <key>Type</key>
++      <string>Boolean</string>
++      <key>Value</key>
++      <integer>1</integer>
++    </map>
+     <key>IbashoMaxSessionSpend</key>
+     <map>
+       <key>Comment</key>
+diff --git a/indra/newview/ibashoagent.cpp b/indra/newview/ibashoagent.cpp
+index 291f028..61e5706 100644
+--- a/indra/newview/ibashoagent.cpp
++++ b/indra/newview/ibashoagent.cpp
+@@ -110,6 +110,7 @@ void handle_rebake_textures();                                  // llviewermenu.
+ extern std::function<bool(LLFloater*, bool)> gIbashoFloaterVisibility; // llfloater.cpp
+ #if LL_WINDOWS
+ extern std::atomic<bool> gIbashoSpectator; // llwindowwin32.cpp
++extern std::atomic<bool> gIbashoNoActivate; // llwindowwin32.cpp
+ #endif
+ 
+ using namespace LLAvatarAppearanceDefines;
+@@ -2079,6 +2080,22 @@ void ibasho::initSpectator()
+ #endif
+ }
+ 
++// No activation (2026-10-23, Claude Opus 5.5): while IbashoNoActivate is on, the window layer never activates or
++// raises the viewer's window (llwindowwin32.cpp); this keeps its flag in step with the setting.
++void ibasho::initNoActivate()
++{
++#if LL_WINDOWS
++    LLControlVariable* control = gSavedSettings.getControl("IbashoNoActivate");
++    if (!control)
++        return;
++    gIbashoNoActivate = control->getValue().asBoolean();
++    control->getSignal()->connect([](LLControlVariable*, const LLSD& value, const LLSD&)
++    {
++        gIbashoNoActivate = value.asBoolean();
++    });
++#endif
++}
++
+ void ibasho::onInjectedMouse(const LLCoordGL& pos)
+ {
+ #if LL_WINDOWS
+diff --git a/indra/newview/ibashohooks.h b/indra/newview/ibashohooks.h
+index a7e9c0c..cf72c83 100644
+--- a/indra/newview/ibashohooks.h
++++ b/indra/newview/ibashohooks.h
+@@ -58,6 +58,9 @@ namespace ibasho
+     void initSpectator();
+     // LLWindow mouse events from LEAP; while spectating, the window's cursor position follows them.
+     void onInjectedMouse(const LLCoordGL& pos);
++    // Mirror the IbashoNoActivate setting into the window layer (the viewer never activates or raises its
++    // window); from LLAppViewer::initConfiguration, before the splash screen.
++    void initNoActivate();
+ 
+     // Hard limits (ibasholimits.cpp), checked where the viewer sends, so they hold for UI clicks and keys
+     // sent over LEAP too. Each returns false, after a notice and an IbashoEvents "refused" event, to refuse.
+diff --git a/indra/newview/llappviewer.cpp b/indra/newview/llappviewer.cpp
+index b8e60ce..ca58ea8 100644
+--- a/indra/newview/llappviewer.cpp
++++ b/indra/newview/llappviewer.cpp
+@@ -24,13 +24,14 @@
+  * $/LicenseInfo$
+  *
+  * Modified for Ibasho (2026-10-22, 2026-10-23): the app folder is named Ibasho; the splash text uses
+- * the app name; no update checks with Linden Lab's update service; no LibVLC. Changes are marked
+- * "Ibasho".
++ * the app name; no update checks with Linden Lab's update service; no LibVLC; the window never takes
++ * focus by itself (IbashoNoActivate, set up before the splash). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+ 
+ #include "llappviewer.h"
++#include "ibashohooks.h" // Ibasho
+ 
+ // Viewer includes
+ #include "llversioninfo.h"
+@@ -3011,6 +3012,8 @@ bool LLAppViewer::initConfiguration()
+         }
+     }
+ 
++    ibasho::initNoActivate(); // Ibasho: before the splash and the window, so neither takes focus
++
+     // Display splash screen.  Must be after above check for previous
+     // crash as this dialog is always frontmost.
+     if (!gGPUBenchmarkMode)

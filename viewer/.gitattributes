@@ -1,0 +1,3 @@
+# Patches go to git am byte for byte (some carry binary images); shell scripts run in Git Bash.
+*.patch -text
+*.sh text eol=lf

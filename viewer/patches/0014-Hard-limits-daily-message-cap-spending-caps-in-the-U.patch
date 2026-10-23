@@ -1,0 +1,517 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Thu, 22 Oct 2026 23:01:29 +0000
+Subject: [PATCH 14/25] Hard limits: daily message cap, spending caps in the
+ UI, no land or L$ buying
+
+Limits that hold however the viewer is driven, including UI clicks and keys
+sent over LEAP, since they're checked where the viewer sends:
+
+- IbashoMaxMessagesPerDay (3000): outgoing local chat lines (channel 0) and
+  IMs per day, by Second Life time date, counted in a small file in the
+  settings folder so restarts and crashes don't reset it. Past it the
+  message isn't sent, with a notice. IbashoAgent messages reports the count.
+- The spending caps (IbashoMaxPayment, IbashoMaxSessionSpend) now also apply
+  to the pay window, the buy window and parcel passes.
+- IbashoAllowLandBuy and IbashoAllowCurrencyBuy (both off): the Buy Land
+  window and buying L$ with real money are refused unless the person
+  turns them on.
+- Refusals show a notice and post IbashoEvents {event: "refused", what,
+  reason}.
+- Chat and IM transcripts are off by default (LogNearbyChat,
+  KeepConversationLogTranscripts): nothing of other people's words is
+  written to disk unless the person turns it on.
+---
+ indra/newview/CMakeLists.txt                  |   1 +
+ indra/newview/app_settings/settings.xml       |  33 ++++
+ .../app_settings/settings_per_account.xml     |   6 +-
+ indra/newview/ibashoagent.cpp                 |  13 +-
+ indra/newview/ibashocommon.h                  |   5 +
+ indra/newview/ibashohooks.h                   |   9 ++
+ indra/newview/ibashoim.cpp                    |   8 +-
+ indra/newview/ibasholimits.cpp                | 151 ++++++++++++++++++
+ indra/newview/llcurrencyuimanager.cpp         |   2 +
+ indra/newview/llfloaterbuyland.cpp            |   2 +
+ indra/newview/llfloaterimnearbychat.cpp       |   9 ++
+ indra/newview/llimview.cpp                    |   1 +
+ indra/newview/llselectmgr.cpp                 |   1 +
+ indra/newview/llviewermessage.cpp             |   1 +
+ indra/newview/llviewerparcelmgr.cpp           |   3 +
+ 15 files changed, 241 insertions(+), 4 deletions(-)
+ create mode 100644 indra/newview/ibasholimits.cpp
+
+diff --git a/indra/newview/CMakeLists.txt b/indra/newview/CMakeLists.txt
+index 107cdf6..7d5b064 100644
+--- a/indra/newview/CMakeLists.txt
++++ b/indra/newview/CMakeLists.txt
+@@ -758,6 +758,7 @@ set(viewer_SOURCE_FILES
+     ibashoagent.cpp
+     ibashocommon.cpp
+     ibashoim.cpp
++    ibasholimits.cpp
+     ibashomesh.cpp
+     ibashomove.cpp
+     ibashoobjects.cpp
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index 47e22a7..7752132 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -11959,6 +11959,39 @@
+       <key>Value</key>
+       <integer>500</integer>
+     </map>
++    <key>IbashoMaxMessagesPerDay</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: most outgoing local chat lines and IMs per day (Second Life time date; kept across restarts); past it they are refused. 0 = no limit. Linden Lab's Scripted Agent Policy allows 5000 a day for all of one owner's agents.</string>
++      <key>Persist</key>
++      <integer>1</integer>
++      <key>Type</key>
++      <string>S32</string>
++      <key>Value</key>
++      <integer>3000</integer>
++    </map>
++    <key>IbashoAllowLandBuy</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: allow buying land (the Buy Land window). Off by default.</string>
++      <key>Persist</key>
++      <integer>1</integer>
++      <key>Type</key>
++      <string>Boolean</string>
++      <key>Value</key>
++      <integer>0</integer>
++    </map>
++    <key>IbashoAllowCurrencyBuy</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: allow buying L$ with real money (the Buy L$ window). Off by default.</string>
++      <key>Persist</key>
++      <integer>1</integer>
++      <key>Type</key>
++      <string>Boolean</string>
++      <key>Value</key>
++      <integer>0</integer>
++    </map>
+     <key>IbashoMaxUploadCost</key>
+     <map>
+       <key>Comment</key>
+diff --git a/indra/newview/app_settings/settings_per_account.xml b/indra/newview/app_settings/settings_per_account.xml
+index 99c43ac..7ec6141 100644
+--- a/indra/newview/app_settings/settings_per_account.xml
++++ b/indra/newview/app_settings/settings_per_account.xml
+@@ -176,6 +176,7 @@
+         <key>Value</key>
+           <string />
+       </map>
++    <!-- Ibasho: off by default (was 1) -->
+     <key>LogNearbyChat</key>
+         <map>
+         <key>Comment</key>
+@@ -185,7 +186,7 @@
+         <key>Type</key>
+             <string>Boolean</string>
+         <key>Value</key>
+-            <integer>1</integer>
++            <integer>0</integer>
+         </map>
+     <key>LogTimestamp</key>
+         <map>
+@@ -326,6 +327,7 @@
+         <key>Value</key>
+             <integer>0</integer>
+         </map>
++    <!-- Ibasho: off by default (was 2) -->
+     <key>KeepConversationLogTranscripts</key>
+     	<map>
+       	<key>Comment</key>
+@@ -335,7 +337,7 @@
+       	<key>Type</key>
+       		<string>S32</string>
+       	<key>Value</key>
+-      		<integer>2</integer>
++      		<integer>0</integer>
+     	</map>    
+     <key>NearbyChatIsNotTornOff</key>
+     <map>
+diff --git a/indra/newview/ibashoagent.cpp b/indra/newview/ibashoagent.cpp
+index f5b9f92..ce1cdaf 100644
+--- a/indra/newview/ibashoagent.cpp
++++ b/indra/newview/ibashoagent.cpp
+@@ -664,6 +664,12 @@ public:
+         add("stop",
+             "Stop the current move now. Replies {was_moving, pos, ...} (the move_done info if it was moving).",
+             [](const LLSD& data) { ibasho::stopMove(data); });
++        add("messages",
++            "Today's outgoing chat lines and IMs against IbashoMaxMessagesPerDay (counted by Second Life time\n"
++            "date, kept across restarts): replies {date, count, max, left}. Past the limit, chat and IMs are\n"
++            "refused with a notice and an IbashoEvents {event: \"refused\"}.",
++            &IbashoAgentListener::messages,
++            llsd::map("reply", LLSD()));
+         add("uploadMesh",
+             "Upload a model (.dae, .gltf, .glb) through the model upload floater, as picking the file for\n"
+             "the high LOD does: lower LODs and physics as the floater generates them by default, then\n"
+@@ -728,6 +734,11 @@ private:
+         response["held"] = held;
+     }
+ 
++    void messages(const LLSD& data)
++    {
++        Response response(ibasho::messageCount(), data);
++    }
++
+     void spectator(const LLSD& data)
+     {
+         Response response(LLSD(), data);
+@@ -771,7 +782,7 @@ private:
+             give_money(to, gAgent.getRegion(), amount, false, TRANS_GIFT, data["desc"].asString());
+             response["target"] = "avatar";
+         }
+-        ibasho::recordSpend(amount);
++        // give_money checked the caps again and counted the payment (ibasho::allowSpend)
+         response["ok"] = true;
+         response["spent_this_session"] = ibasho::spentThisSession();
+     }
+diff --git a/indra/newview/ibashocommon.h b/indra/newview/ibashocommon.h
+index 21cf075..7d87326 100644
+--- a/indra/newview/ibashocommon.h
++++ b/indra/newview/ibashocommon.h
+@@ -61,6 +61,11 @@ namespace ibasho
+     // IbashoAgent ops that live in their own files (ibashomove.cpp, ibashomesh.cpp).
+     void move(const LLSD& request);
+     void stopMove(const LLSD& request);
++
++    // ibasholimits.cpp: a notice plus an IbashoEvents {event: "refused", what, reason}; and today's
++    // message count {date, count, max, left}.
++    void refuse(const std::string& what, const std::string& reason);
++    LLSD messageCount();
+     void uploadMesh(const LLSD& request);
+ }
+ 
+diff --git a/indra/newview/ibashohooks.h b/indra/newview/ibashohooks.h
+index cad829c..e0d45f3 100644
+--- a/indra/newview/ibashohooks.h
++++ b/indra/newview/ibashohooks.h
+@@ -58,6 +58,15 @@ namespace ibasho
+     void initSpectator();
+     // LLWindow mouse events from LEAP; while spectating, the window's cursor position follows them.
+     void onInjectedMouse(const LLCoordGL& pos);
++
++    // Hard limits (ibasholimits.cpp), checked where the viewer sends, so they hold for UI clicks and keys
++    // sent over LEAP too. Each returns false, after a notice and an IbashoEvents "refused" event, to refuse.
++    // Outgoing local chat line or IM: counted against IbashoMaxMessagesPerDay (by SLT date, persisted).
++    bool allowOutgoingMessage(const std::string& kind);
++    // A payment or purchase through the viewer's own UI: the spending caps; counts toward the session.
++    bool allowSpend(S32 amount, const std::string& what);
++    bool allowLandBuy();      // IbashoAllowLandBuy
++    bool allowCurrencyBuy();  // IbashoAllowCurrencyBuy (buying L$ with real money)
+ }
+ 
+ #endif
+diff --git a/indra/newview/ibashoim.cpp b/indra/newview/ibashoim.cpp
+index d8dc226..0003e3e 100644
+--- a/indra/newview/ibashoim.cpp
++++ b/indra/newview/ibashoim.cpp
+@@ -124,7 +124,13 @@ private:
+                 reply["error"] = "session didn't start (not sent)";
+                 return true;
+             }
+-            LLIMModel::sendMessage(text, session_id, other_id, dialog);
++            LLSD left = ibasho::messageCount()["left"];
++            if (left.isDefined() && left.asInteger() <= 0)
++            {
++                reply["error"] = "today's message limit is reached (IbashoMaxMessagesPerDay); not sent";
++                return true;
++            }
++            LLIMModel::sendMessage(text, session_id, other_id, dialog); // counted there (ibasho::allowOutgoingMessage)
+             reply["session_id"] = session_id;
+             return true;
+         });
+diff --git a/indra/newview/ibasholimits.cpp b/indra/newview/ibasholimits.cpp
+new file mode 100644
+index 0000000..35f49ea
+--- /dev/null
++++ b/indra/newview/ibasholimits.cpp
+@@ -0,0 +1,151 @@
++/**
++ * @file   ibasholimits.cpp
++ * @brief  Hard limits that hold however the viewer is driven (LEAP APIs, or UI clicks and keys sent
++ *         over LEAP): a daily cap on outgoing chat lines and IMs, the spending caps on the UI's own
++ *         payment and purchase paths, and no land or L$ purchases unless the person allows them.
++ *         Written by Claude Opus 5.5, 2026-10-22.
++ *
++ * $LicenseInfo:firstyear=2026&license=viewerlgpl$
++ * Ibasho viewer source code: an addition to the Second Life Viewer Source Code
++ * (Linden Research, Inc.), written for Ibasho by Claude (Anthropic) models.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation;
++ * version 2.1 of the License only.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
++ * $/LicenseInfo$
++ */
++
++#include "llviewerprecompiledheaders.h"
++#include "ibashocommon.h"
++#include "ibashohooks.h"
++
++#include "lldir.h"
++#include "llnotificationsutil.h"
++#include "llsdutil.h"
++#include "llstring.h"
++#include "lltimer.h"
++#include "llviewercontrol.h"
++
++#include <fstream>
++
++namespace
++{
++
++// Today's count of outgoing chat lines and IMs, by Second Life time (Pacific) date, kept in a small file
++// in the settings folder so a restart (or a crash) doesn't reset it.
++struct MessageCount
++{
++    std::string date;
++    S32 count = 0;
++    bool loaded = false;
++};
++MessageCount sMessages;
++
++std::string countFile()
++{
++    return gDirUtilp->getExpandedFilename(LL_PATH_USER_SETTINGS, "ibasho_messages.txt");
++}
++
++std::string sltDate()
++{
++    struct tm* t = utc_to_pacific_time(time(nullptr), LLStringOps::getPacificDaylightTime());
++    return llformat("%04d-%02d-%02d", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday);
++}
++
++void rollDate()
++{
++    if (!sMessages.loaded)
++    {
++        sMessages.loaded = true;
++        std::ifstream in(countFile());
++        in >> sMessages.date >> sMessages.count;
++    }
++    std::string today = sltDate();
++    if (today != sMessages.date)
++    {
++        sMessages.date = today;
++        sMessages.count = 0;
++    }
++}
++
++void saveCount()
++{
++    std::ofstream out(countFile(), std::ios::trunc);
++    out << sMessages.date << ' ' << sMessages.count << '\n';
++}
++
++} // namespace
++
++namespace ibasho
++{
++
++void refuse(const std::string& what, const std::string& reason)
++{
++    LL_WARNS("Ibasho") << reason << LL_ENDL;
++    LLNotificationsUtil::add("SystemMessageTip", llsd::map("MESSAGE", reason));
++    postEvent("refused", llsd::map("what", what, "reason", reason));
++}
++
++bool allowOutgoingMessage(const std::string& kind)
++{
++    rollDate();
++    S32 max = gSavedSettings.getS32("IbashoMaxMessagesPerDay");
++    if (max > 0 && sMessages.count >= max)
++    {
++        refuse(kind, llformat("Ibasho: this %s wasn't sent. Today's limit of %d chat lines and IMs "
++                              "(IbashoMaxMessagesPerDay, counted by Second Life time) is reached.",
++                              kind.c_str(), max));
++        return false;
++    }
++    ++sMessages.count;
++    saveCount();
++    return true;
++}
++
++LLSD messageCount()
++{
++    rollDate();
++    S32 max = gSavedSettings.getS32("IbashoMaxMessagesPerDay");
++    return llsd::map("date", sMessages.date, "count", sMessages.count, "max", max,
++                     "left", max > 0 ? LLSD(llmax(0, max - sMessages.count)) : LLSD());
++}
++
++bool allowSpend(S32 amount, const std::string& what)
++{
++    std::string refusal = spendRefusal(amount);
++    if (!refusal.empty())
++    {
++        refuse(what, "Ibasho: " + what + " refused: " + refusal + ".");
++        return false;
++    }
++    recordSpend(amount);
++    return true;
++}
++
++bool allowLandBuy()
++{
++    if (gSavedSettings.getBOOL("IbashoAllowLandBuy"))
++        return true;
++    refuse("land", "Ibasho: buying land is off in this viewer (setting IbashoAllowLandBuy).");
++    return false;
++}
++
++bool allowCurrencyBuy()
++{
++    if (gSavedSettings.getBOOL("IbashoAllowCurrencyBuy"))
++        return true;
++    refuse("currency", "Ibasho: buying L$ with real money is off in this viewer (setting IbashoAllowCurrencyBuy).");
++    return false;
++}
++
++} // namespace ibasho
+diff --git a/indra/newview/llcurrencyuimanager.cpp b/indra/newview/llcurrencyuimanager.cpp
+index 8a4ab09..7e9c616 100644
+--- a/indra/newview/llcurrencyuimanager.cpp
++++ b/indra/newview/llcurrencyuimanager.cpp
+@@ -26,6 +26,7 @@
+ 
+ #include "llviewerprecompiledheaders.h"
+ 
++#include "ibashohooks.h" // Ibasho
+ #include "lluictrlfactory.h"
+ #include "lltextbox.h"
+ #include "lllineeditor.h"
+@@ -564,6 +565,7 @@ bool LLCurrencyUIManager::process()
+ 
+ void LLCurrencyUIManager::buy(const std::string& buy_msg)
+ {
++    if (!ibasho::allowCurrencyBuy()) return; // Ibasho: no real-money L$ purchases unless IbashoAllowCurrencyBuy
+     if (!canBuy())
+     {
+         return;
+diff --git a/indra/newview/llfloaterbuyland.cpp b/indra/newview/llfloaterbuyland.cpp
+index a38cc94..d61d11d 100644
+--- a/indra/newview/llfloaterbuyland.cpp
++++ b/indra/newview/llfloaterbuyland.cpp
+@@ -27,6 +27,7 @@
+ #include "llviewerprecompiledheaders.h"
+ 
+ #include "llfloaterbuyland.h"
++#include "ibashohooks.h" // Ibasho
+ 
+ // viewer includes
+ #include "llagent.h"
+@@ -1339,6 +1340,7 @@ void LLFloaterBuyLandUI::startBuyPostConfirm(const std::string& password)
+ 
+ void LLFloaterBuyLandUI::onClickBuy()
+ {
++    if (!ibasho::allowLandBuy()) return; // Ibasho: no land purchases unless IbashoAllowLandBuy
+     startBuyPreConfirm();
+ }
+ 
+diff --git a/indra/newview/llfloaterimnearbychat.cpp b/indra/newview/llfloaterimnearbychat.cpp
+index 860535a..a7f8fb1 100644
+--- a/indra/newview/llfloaterimnearbychat.cpp
++++ b/indra/newview/llfloaterimnearbychat.cpp
+@@ -27,6 +27,7 @@
+ #include "llviewerprecompiledheaders.h"
+ 
+ #include "message.h"
++#include "ibashohooks.h" // Ibasho
+ 
+ #include "lliconctrl.h"
+ #include "llappviewer.h"
+@@ -962,6 +963,14 @@ void send_chat_from_viewer(const std::string& utf8_out_text, EChatType type, S32
+         LLUIUsage::instance().logCommand("Chat.SendNearby"); // pseuo-command
+     }
+ 
++    // <Ibasho> the daily message limit (typing start/stop and chat to scripts on other channels don't count)
++    if (channel == 0 && (type == CHAT_TYPE_WHISPER || type == CHAT_TYPE_NORMAL || type == CHAT_TYPE_SHOUT)
++        && !ibasho::allowOutgoingMessage("chat line"))
++    {
++        return;
++    }
++    // </Ibasho>
++
+     LLMessageSystem* msg = gMessageSystem;
+ 
+     if (channel >= 0)
+diff --git a/indra/newview/llimview.cpp b/indra/newview/llimview.cpp
+index 59e4843..875d6af 100644
+--- a/indra/newview/llimview.cpp
++++ b/indra/newview/llimview.cpp
+@@ -1935,6 +1935,7 @@ void LLIMModel::sendMessage(const std::string& utf8_text,
+                      const LLUUID& other_participant_id,
+                      EInstantMessage dialog)
+ {
++    if (!ibasho::allowOutgoingMessage("IM")) return; // Ibasho: the daily message limit
+     std::string name;
+     bool sent = false;
+     LLAgentUI::buildFullname(name);
+diff --git a/indra/newview/llselectmgr.cpp b/indra/newview/llselectmgr.cpp
+index 59f9c13..a7d96a0 100644
+--- a/indra/newview/llselectmgr.cpp
++++ b/indra/newview/llselectmgr.cpp
+@@ -4826,6 +4826,7 @@ struct LLBuyData
+ // info -as displayed in the UI- for every item.
+ void LLSelectMgr::sendBuy(const LLUUID& buyer_id, const LLUUID& category_id, const LLSaleInfo sale_info)
+ {
++    if (!ibasho::allowSpend(sale_info.getSalePrice(), "purchase")) return; // Ibasho: spending caps
+     LLBuyData buy;
+     buy.mCategoryID = category_id;
+     buy.mSaleInfo = sale_info;
+diff --git a/indra/newview/llviewermessage.cpp b/indra/newview/llviewermessage.cpp
+index f86cc38..1c377a8 100644
+--- a/indra/newview/llviewermessage.cpp
++++ b/indra/newview/llviewermessage.cpp
+@@ -386,6 +386,7 @@ void give_money(const LLUUID& uuid, LLViewerRegion* region, S32 amount, bool is_
+             LL_WARNS() << "Failed to send L$ gift to to Null UUID." << LL_ENDL;
+             return;
+         }
++        if (!ibasho::allowSpend(amount, "payment")) return; // Ibasho: spending caps, for the pay window too
+ //      gStatusBar->debitBalance(amount);
+         LLMessageSystem* msg = gMessageSystem;
+         msg->newMessageFast(_PREHASH_MoneyTransferRequest);
+diff --git a/indra/newview/llviewerparcelmgr.cpp b/indra/newview/llviewerparcelmgr.cpp
+index 63eb08e..adda41a 100644
+--- a/indra/newview/llviewerparcelmgr.cpp
++++ b/indra/newview/llviewerparcelmgr.cpp
+@@ -27,6 +27,7 @@
+ #include "llviewerprecompiledheaders.h"
+ 
+ #include "llviewerparcelmgr.h"
++#include "ibashohooks.h" // Ibasho
+ 
+ // Library includes
+ #include "llaudioengine.h"
+@@ -1226,6 +1227,7 @@ LLViewerParcelMgr::ParcelBuyInfo* LLViewerParcelMgr::setupParcelBuy(
+ 
+ void LLViewerParcelMgr::sendParcelBuy(ParcelBuyInfo* info)
+ {
++    if (!ibasho::allowLandBuy()) return; // Ibasho: no land purchases unless IbashoAllowLandBuy
+     // send the message
+     LLMessageSystem* msg = gMessageSystem;
+     msg->newMessage(info->mIsClaim ? "ParcelClaim" : "ParcelBuy");
+@@ -2613,6 +2615,7 @@ void LLViewerParcelMgr::buyPass()
+ 
+     LLViewerRegion* region = getSelectionRegion();
+     if (!region) return;
++    if (!ibasho::allowSpend(parcel->getPassPrice(), "parcel pass")) return; // Ibasho: spending caps
+ 
+     LLMessageSystem* msg = gMessageSystem;
+     msg->newMessageFast(_PREHASH_ParcelBuyPass);

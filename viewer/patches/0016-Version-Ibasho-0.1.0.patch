@@ -1,0 +1,20 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Thu, 22 Oct 2026 22:08:43 +0000
+Subject: [PATCH 16/25] Version: Ibasho 0.1.0
+
+Ibasho numbers its own releases (MAJOR.MINOR.PATCH from VIEWER_VERSION.txt);
+the build number is set by Ibasho's configure script to the number of
+commits in the Ibasho series, so every change to the series gets a new
+four-part version. The Linden Lab base is named in About.
+---
+ indra/newview/VIEWER_VERSION.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/indra/newview/VIEWER_VERSION.txt b/indra/newview/VIEWER_VERSION.txt
+index bb6eac9..6e8bf73 100644
+--- a/indra/newview/VIEWER_VERSION.txt
++++ b/indra/newview/VIEWER_VERSION.txt
+@@ -1 +1 @@
+-26.4.0
++0.1.0

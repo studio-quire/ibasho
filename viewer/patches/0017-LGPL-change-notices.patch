@@ -1,0 +1,953 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 08:00:02 +0000
+Subject: [PATCH 17/25] LGPL change notices
+
+Every Linden Lab file this series changes now says so in its header: what
+changed and when (UTC dates), with the changed lines marked "Ibasho".
+doc/IBASHO-CHANGES.txt lists all of them, images and data files included,
+with the base commit.
+---
+ doc/IBASHO-CHANGES.txt                        | 217 ++++++++++++++++++
+ indra/llfilesystem/lldir.cpp                  |   3 +
+ indra/llui/llfloater.cpp                      |   3 +
+ indra/llwindow/llwindowwin32.cpp              |   3 +
+ indra/newview/CMakeLists.txt                  |   2 +
+ indra/newview/app_settings/settings.xml       |   1 +
+ .../app_settings/settings_per_account.xml     |   1 +
+ indra/newview/llappviewer.cpp                 |   3 +
+ indra/newview/llappviewer.h                   |   2 +
+ indra/newview/llappviewerwin32.cpp            |   3 +
+ indra/newview/llcurrencyuimanager.cpp         |   3 +
+ indra/newview/lldrawpoolalpha.cpp             |   3 +
+ indra/newview/lldrawpoolavatar.cpp            |   3 +
+ indra/newview/llfloaterbuyland.cpp            |   3 +
+ indra/newview/llfloaterimnearbychat.cpp       |   3 +
+ indra/newview/llfloatermodelpreview.h         |   3 +
+ indra/newview/llhudobject.cpp                 |   3 +
+ indra/newview/llimprocessing.cpp              |   3 +
+ indra/newview/llimview.cpp                    |   3 +
+ indra/newview/llmodelpreview.h                |   3 +
+ indra/newview/llpanellogin.cpp                |   3 +
+ indra/newview/llselectmgr.cpp                 |   3 +
+ indra/newview/llspatialpartition.cpp          |   3 +
+ indra/newview/lluilistener.cpp                |   3 +
+ indra/newview/llviewermessage.cpp             |   3 +
+ indra/newview/llviewerobjectlist.cpp          |   3 +
+ indra/newview/llviewerparcelmgr.cpp           |   3 +
+ indra/newview/llviewerwindow.cpp              |   3 +
+ indra/newview/llvopartgroup.cpp               |   3 +
+ indra/newview/llwindowlistener.cpp            |   3 +
+ indra/newview/pipeline.cpp                    |   3 +
+ indra/newview/res/viewerRes.rc                |   2 +
+ .../newview/skins/default/xui/da/strings.xml  |   1 +
+ .../skins/default/xui/de/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/de/strings.xml  |   1 +
+ .../skins/default/xui/en/floater_about.xml    |   1 +
+ .../skins/default/xui/en/panel_login.xml      |   1 +
+ .../newview/skins/default/xui/en/strings.xml  |   1 +
+ .../skins/default/xui/es/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/es/strings.xml  |   1 +
+ .../skins/default/xui/fr/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/fr/strings.xml  |   1 +
+ .../skins/default/xui/it/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/it/strings.xml  |   1 +
+ .../skins/default/xui/ja/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/ja/strings.xml  |   1 +
+ .../skins/default/xui/pl/floater_about.xml    |   1 +
+ .../skins/default/xui/pt/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/pt/strings.xml  |   1 +
+ .../skins/default/xui/ru/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/ru/strings.xml  |   1 +
+ .../skins/default/xui/tr/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/tr/strings.xml  |   1 +
+ .../skins/default/xui/zh/floater_about.xml    |   1 +
+ .../newview/skins/default/xui/zh/strings.xml  |   1 +
+ indra/newview/viewer_manifest.py              |   2 +
+ 56 files changed, 328 insertions(+)
+ create mode 100644 doc/IBASHO-CHANGES.txt
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+new file mode 100644
+index 0000000..5bfa19e
+--- /dev/null
++++ b/doc/IBASHO-CHANGES.txt
+@@ -0,0 +1,217 @@
++Ibasho: changes to Linden Lab's files
++
++Ibasho is a modified version of the Second Life viewer source code (Linden Research, Inc.;
++secondlife/viewer, develop at 81bc977d693e36feb3e468a84ea55cdcbbb37f70), distributed under the GNU LGPL 2.1
++(doc/LGPL-license.txt). As section 2(a) asks, this lists every file of the original that Ibasho
++changed, with the dates of the changes (UTC). Each changed source file also says so in its header,
++and the changed lines are marked "Ibasho". Files Ibasho added (indra/newview/ibasho*) carry their own
++LGPL headers.
++
++doc/LICENSE-logos.txt
++    Modified for Ibasho (2026-10-22, 2026-10-23): a section recording the replaced artwork.
++indra/llfilesystem/lldir.cpp
++    Modified for Ibasho (2026-10-22): the cache folder is named after the app (Ibasho) instead of
++    SecondLife.
++indra/llui/llfloater.cpp
++    Modified for Ibasho (2026-10-10, 2026-10-22): a hook that lets newview hold a floater hidden
++    (IbashoAgent streamUI).
++indra/llwindow/llwindowwin32.cpp
++    Modified for Ibasho (2026-10-11, 2026-10-22): spectator mode (the real mouse and keyboard
++    don't reach the viewer while LEAP drives it); the splash says Ibasho.
++indra/newview/CMakeLists.txt
++    Modified for Ibasho (2026-10-10, 2026-10-22): builds the Ibasho LEAP API files.
++indra/newview/VIEWER_VERSION.txt
++    Modified for Ibasho (2026-10-22): Ibasho's own version number (a data file read by CMake).
++indra/newview/app_settings/settings.xml
++    Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22): settings for the Ibasho LEAP APIs
++    and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator,
++    IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy).
++indra/newview/app_settings/settings_per_account.xml
++    Modified for Ibasho (2026-10-22): chat and IM transcripts off by default (LogNearbyChat,
++    KeepConversationLogTranscripts).
++indra/newview/icons/test/secondlife.icns
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife.ico
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife_128.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife_16.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife_256.BMP
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife_256.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife_32.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife_48.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/icons/test/secondlife_512.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/installers/windows/install_icon.BMP
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/installers/windows/install_icon.ico
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/installers/windows/uninstall_icon.BMP
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/installers/windows/uninstall_icon.ico
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/llappviewer.cpp
++    Modified for Ibasho (2026-10-22): the app folder is named Ibasho; the splash text uses the app
++    name.
++indra/newview/llappviewer.h
++    Modified for Ibasho (2026-10-22): the window class is Ibasho's own.
++indra/newview/llappviewerwin32.cpp
++    Modified for Ibasho (2026-10-22): the single-instance mutex is Ibasho's own.
++indra/newview/llcurrencyuimanager.cpp
++    Modified for Ibasho (2026-10-22): buying L$ with real money is refused unless
++    IbashoAllowCurrencyBuy.
++indra/newview/lldrawpoolalpha.cpp
++    Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the
++    window's frames (IbashoAgent hideAvatars).
++indra/newview/lldrawpoolavatar.cpp
++    Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the
++    window's frames (IbashoAgent hideAvatars).
++indra/newview/llfloaterbuyland.cpp
++    Modified for Ibasho (2026-10-22): buying land is refused unless IbashoAllowLandBuy.
++indra/newview/llfloaterimnearbychat.cpp
++    Modified for Ibasho (2026-10-22): local chat lines count toward the daily message limit
++    (IbashoMaxMessagesPerDay).
++indra/newview/llfloatermodelpreview.h
++    Modified for Ibasho (2026-10-10, 2026-10-22): a friend declaration for IbashoAgent uploadMesh.
++indra/newview/llhudobject.cpp
++    Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the
++    window's frames (IbashoAgent hideAvatars).
++indra/newview/llimprocessing.cpp
++    Modified for Ibasho (2026-10-10, 2026-10-22): hook: IMs from objects are posted to
++    IbashoEvents.
++indra/newview/llimview.cpp
++    Modified for Ibasho (2026-10-10, 2026-10-22): hooks: incoming and outgoing IMs are posted to
++    IbashoEvents; outgoing IMs count toward the daily message limit.
++indra/newview/llmodelpreview.h
++    Modified for Ibasho (2026-10-17, 2026-10-22): a friend declaration for IbashoAgent uploadMesh.
++indra/newview/llpanellogin.cpp
++    Modified for Ibasho (2026-10-22): shows the viewer's name and version on the login screen.
++indra/newview/llselectmgr.cpp
++    Modified for Ibasho (2026-10-10, 2026-10-22): hooks: object properties replies fill the
++    IbashoObjects cache; purchases within the spending caps.
++indra/newview/llspatialpartition.cpp
++    Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the
++    window's frames (IbashoAgent hideAvatars).
++indra/newview/lluilistener.cpp
++    Modified for Ibasho (2026-10-10, 2026-10-22): UI.call replies with an error for an unknown
++    function instead of crashing.
++indra/newview/llviewermessage.cpp
++    Modified for Ibasho (2026-10-10, 2026-10-22): hook: balance replies are posted to
++    IbashoEvents; payments within the spending caps.
++indra/newview/llviewerobjectlist.cpp
++    Modified for Ibasho (2026-10-10, 2026-10-22): hook: objects created by the Ibasho APIs.
++indra/newview/llviewerparcelmgr.cpp
++    Modified for Ibasho (2026-10-22): land purchases refused unless IbashoAllowLandBuy; parcel
++    passes within the spending caps.
++indra/newview/llviewerwindow.cpp
++    Modified for Ibasho (2026-10-11, 2026-10-22): hook: spectator mode is set up before the
++    window exists.
++indra/newview/llvopartgroup.cpp
++    Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the
++    window's frames (IbashoAgent hideAvatars).
++indra/newview/llwindowlistener.cpp
++    Modified for Ibasho (2026-10-11, 2026-10-22): hook: LEAP mouse events move the app's cursor
++    in spectator mode.
++indra/newview/pipeline.cpp
++    Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the
++    window's frames (IbashoAgent hideAvatars).
++indra/newview/res/icon1.ico
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/res/ll_icon_small.ico
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/res/viewerRes.rc
++    Modified for Ibasho (2026-10-22): version resources and the splash say Ibasho.
++indra/newview/skins/default/textures/icons/Inv_SysClosed.png
++    Replaced for Ibasho (2026-10-23) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/icons/Inv_SysOpen.png
++    Replaced for Ibasho (2026-10-23) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/icons/SL_Logo.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/icons/hand.png
++    Replaced for Ibasho (2026-10-23) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/icons/map_placeholder.png
++    Replaced for Ibasho (2026-10-23) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/taskpanel/TabIcon_Home_Selected.png
++    Replaced for Ibasho (2026-10-23) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/windows/login_sl_logo.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/windows/login_sl_logo_horizontal.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/textures/windows/login_sl_logo_small.png
++    Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
++indra/newview/skins/default/xui/da/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/de/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/de/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/en/floater_about.xml
++    Modified for Ibasho (2026-10-22): credits and licenses for Ibasho (base credited, Havok,
++    Kakadu and Siren14 lines dropped, artwork notice).
++indra/newview/skins/default/xui/en/panel_login.xml
++    Modified for Ibasho (2026-10-22): a line with the viewer's name and version.
++indra/newview/skins/default/xui/en/strings.xml
++    Modified for Ibasho (2026-10-22): the app name is Ibasho; the About header names the base and
++    says who doesn't support it.
++indra/newview/skins/default/xui/es/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/es/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/fr/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/fr/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/it/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/it/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/ja/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/ja/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/pl/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/pt/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/pt/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/ru/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/ru/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/tr/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/tr/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/skins/default/xui/zh/floater_about.xml
++    Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
++    English (Ibasho) ones apply.
++indra/newview/skins/default/xui/zh/strings.xml
++    Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
++    overrides removed, so the English (Ibasho) ones apply.
++indra/newview/viewer_manifest.py
++    Modified for Ibasho (2026-10-22): app, executable and installer names (Ibasho,
++    IbashoViewer.exe).
+diff --git a/indra/llfilesystem/lldir.cpp b/indra/llfilesystem/lldir.cpp
+index 795ddc2..3405cb8 100644
+--- a/indra/llfilesystem/lldir.cpp
++++ b/indra/llfilesystem/lldir.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): the cache folder is named after the app (Ibasho) instead of
++ * SecondLife. Changes are marked "Ibasho".
+  */
+ 
+ #include "linden_common.h"
+diff --git a/indra/llui/llfloater.cpp b/indra/llui/llfloater.cpp
+index 52632d6..fed6d63 100644
+--- a/indra/llui/llfloater.cpp
++++ b/indra/llui/llfloater.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-10, 2026-10-22): a hook that lets newview hold a floater hidden
++ * (IbashoAgent streamUI). Changes are marked "Ibasho".
+  */
+ 
+ // Floating "windows" within the GL display, like the inventory floater,
+diff --git a/indra/llwindow/llwindowwin32.cpp b/indra/llwindow/llwindowwin32.cpp
+index 16869a3..c70af60 100644
+--- a/indra/llwindow/llwindowwin32.cpp
++++ b/indra/llwindow/llwindowwin32.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-11, 2026-10-22): spectator mode (the real mouse and keyboard don't
++ * reach the viewer while LEAP drives it); the splash says Ibasho. Changes are marked "Ibasho".
+  */
+ 
+ #include "linden_common.h"
+diff --git a/indra/newview/CMakeLists.txt b/indra/newview/CMakeLists.txt
+index 7d5b064..58d1e6e 100644
+--- a/indra/newview/CMakeLists.txt
++++ b/indra/newview/CMakeLists.txt
+@@ -1,4 +1,6 @@
+ # -*- cmake -*-
++# Modified for Ibasho (2026-10-10, 2026-10-22): builds the Ibasho LEAP API files. Changes are marked
++# "Ibasho".
+ 
+ project(viewer)
+ 
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index 7752132..b7256a7 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy). Changes are marked "Ibasho". -->
+ <llsd xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:noNamespaceSchemaLocation="llsd.xsd">
+ <map>
+diff --git a/indra/newview/app_settings/settings_per_account.xml b/indra/newview/app_settings/settings_per_account.xml
+index 7ec6141..37e887f 100644
+--- a/indra/newview/app_settings/settings_per_account.xml
++++ b/indra/newview/app_settings/settings_per_account.xml
+@@ -1,3 +1,4 @@
++<!-- Modified for Ibasho (2026-10-22): chat and IM transcripts off by default (LogNearbyChat, KeepConversationLogTranscripts). Changes are marked "Ibasho". -->
+ <llsd>
+     <map>
+     <key>AvatarHoverOffsetZ</key>
+diff --git a/indra/newview/llappviewer.cpp b/indra/newview/llappviewer.cpp
+index b08613d..d9d2ac4 100644
+--- a/indra/newview/llappviewer.cpp
++++ b/indra/newview/llappviewer.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): the app folder is named Ibasho; the splash text uses the app
++ * name. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llappviewer.h b/indra/newview/llappviewer.h
+index d956d47..65cead0 100644
+--- a/indra/newview/llappviewer.h
++++ b/indra/newview/llappviewer.h
+@@ -36,6 +36,8 @@
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
+  *
++ * Modified for Ibasho (2026-10-22): the window class is Ibasho's own. Changes are marked "Ibasho".
++ *
+  * @file llappviewer.h
+  * @brief The LLAppViewer class declaration
+  */
+diff --git a/indra/newview/llappviewerwin32.cpp b/indra/newview/llappviewerwin32.cpp
+index 3d6d17e..e517a7d 100644
+--- a/indra/newview/llappviewerwin32.cpp
++++ b/indra/newview/llappviewerwin32.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): the single-instance mutex is Ibasho's own. Changes are marked
++ * "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llcurrencyuimanager.cpp b/indra/newview/llcurrencyuimanager.cpp
+index 7e9c616..b08076b 100644
+--- a/indra/newview/llcurrencyuimanager.cpp
++++ b/indra/newview/llcurrencyuimanager.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): buying L$ with real money is refused unless
++ * IbashoAllowCurrencyBuy. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/lldrawpoolalpha.cpp b/indra/newview/lldrawpoolalpha.cpp
+index a0e1620..0e93a93 100644
+--- a/indra/newview/lldrawpoolalpha.cpp
++++ b/indra/newview/lldrawpoolalpha.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the window's
++ * frames (IbashoAgent hideAvatars). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/lldrawpoolavatar.cpp b/indra/newview/lldrawpoolavatar.cpp
+index 62a3c05..9d1152f 100644
+--- a/indra/newview/lldrawpoolavatar.cpp
++++ b/indra/newview/lldrawpoolavatar.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the window's
++ * frames (IbashoAgent hideAvatars). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llfloaterbuyland.cpp b/indra/newview/llfloaterbuyland.cpp
+index d61d11d..6991c07 100644
+--- a/indra/newview/llfloaterbuyland.cpp
++++ b/indra/newview/llfloaterbuyland.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): buying land is refused unless IbashoAllowLandBuy. Changes are
++ * marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llfloaterimnearbychat.cpp b/indra/newview/llfloaterimnearbychat.cpp
+index a7f8fb1..768545d 100644
+--- a/indra/newview/llfloaterimnearbychat.cpp
++++ b/indra/newview/llfloaterimnearbychat.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): local chat lines count toward the daily message limit
++ * (IbashoMaxMessagesPerDay). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llfloatermodelpreview.h b/indra/newview/llfloatermodelpreview.h
+index 1cbdd10..d5e2711 100644
+--- a/indra/newview/llfloatermodelpreview.h
++++ b/indra/newview/llfloatermodelpreview.h
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-10, 2026-10-22): a friend declaration for IbashoAgent uploadMesh.
++ * Changes are marked "Ibasho".
+  */
+ 
+ #ifndef LL_LLFLOATERMODELPREVIEW_H
+diff --git a/indra/newview/llhudobject.cpp b/indra/newview/llhudobject.cpp
+index f38ba0e..9f557cc 100644
+--- a/indra/newview/llhudobject.cpp
++++ b/indra/newview/llhudobject.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the window's
++ * frames (IbashoAgent hideAvatars). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llimprocessing.cpp b/indra/newview/llimprocessing.cpp
+index cb18c35..ad7473f 100644
+--- a/indra/newview/llimprocessing.cpp
++++ b/indra/newview/llimprocessing.cpp
+@@ -22,6 +22,9 @@
+ *
+ * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+ * $/LicenseInfo$
++*
++* Modified for Ibasho (2026-10-10, 2026-10-22): hook: IMs from objects are posted to IbashoEvents.
++* Changes are marked "Ibasho".
+ */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llimview.cpp b/indra/newview/llimview.cpp
+index 875d6af..2b993ba 100644
+--- a/indra/newview/llimview.cpp
++++ b/indra/newview/llimview.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-10, 2026-10-22): hooks: incoming and outgoing IMs are posted to
++ * IbashoEvents; outgoing IMs count toward the daily message limit. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llmodelpreview.h b/indra/newview/llmodelpreview.h
+index dc327d1..b87e0c4 100644
+--- a/indra/newview/llmodelpreview.h
++++ b/indra/newview/llmodelpreview.h
+@@ -23,6 +23,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-17, 2026-10-22): a friend declaration for IbashoAgent uploadMesh.
++ * Changes are marked "Ibasho".
+  */
+ 
+ #ifndef LL_LLMODELPREVIEW_H
+diff --git a/indra/newview/llpanellogin.cpp b/indra/newview/llpanellogin.cpp
+index 9b7ee0e..d776e0c 100644
+--- a/indra/newview/llpanellogin.cpp
++++ b/indra/newview/llpanellogin.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): shows the viewer's name and version on the login screen.
++ * Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llselectmgr.cpp b/indra/newview/llselectmgr.cpp
+index a7d96a0..4f96faa 100644
+--- a/indra/newview/llselectmgr.cpp
++++ b/indra/newview/llselectmgr.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-10, 2026-10-22): hooks: object properties replies fill the
++ * IbashoObjects cache; purchases within the spending caps. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llspatialpartition.cpp b/indra/newview/llspatialpartition.cpp
+index 6688219..21cd370 100644
+--- a/indra/newview/llspatialpartition.cpp
++++ b/indra/newview/llspatialpartition.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the window's
++ * frames (IbashoAgent hideAvatars). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/lluilistener.cpp b/indra/newview/lluilistener.cpp
+index 3762676..a33f412 100644
+--- a/indra/newview/lluilistener.cpp
++++ b/indra/newview/lluilistener.cpp
+@@ -24,6 +24,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-10, 2026-10-22): UI.call replies with an error for an unknown
++ * function instead of crashing. Changes are marked "Ibasho".
+  */
+ 
+ // Precompiled header
+diff --git a/indra/newview/llviewermessage.cpp b/indra/newview/llviewermessage.cpp
+index 1c377a8..29c2c81 100644
+--- a/indra/newview/llviewermessage.cpp
++++ b/indra/newview/llviewermessage.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-10, 2026-10-22): hook: balance replies are posted to IbashoEvents;
++ * payments within the spending caps. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llviewerobjectlist.cpp b/indra/newview/llviewerobjectlist.cpp
+index 0889b8e..ea846e3 100644
+--- a/indra/newview/llviewerobjectlist.cpp
++++ b/indra/newview/llviewerobjectlist.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-10, 2026-10-22): hook: objects created by the Ibasho APIs. Changes
++ * are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llviewerparcelmgr.cpp b/indra/newview/llviewerparcelmgr.cpp
+index adda41a..a331fc4 100644
+--- a/indra/newview/llviewerparcelmgr.cpp
++++ b/indra/newview/llviewerparcelmgr.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-22): land purchases refused unless IbashoAllowLandBuy; parcel passes
++ * within the spending caps. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llviewerwindow.cpp b/indra/newview/llviewerwindow.cpp
+index fcfefb8..ebb5dfb 100644
+--- a/indra/newview/llviewerwindow.cpp
++++ b/indra/newview/llviewerwindow.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-11, 2026-10-22): hook: spectator mode is set up before the window
++ * exists. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llvopartgroup.cpp b/indra/newview/llvopartgroup.cpp
+index 4570ac3..fa21a3c 100644
+--- a/indra/newview/llvopartgroup.cpp
++++ b/indra/newview/llvopartgroup.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the window's
++ * frames (IbashoAgent hideAvatars). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/llwindowlistener.cpp b/indra/newview/llwindowlistener.cpp
+index 1570fe1..6f5aba0 100644
+--- a/indra/newview/llwindowlistener.cpp
++++ b/indra/newview/llwindowlistener.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-11, 2026-10-22): hook: LEAP mouse events move the app's cursor in
++ * spectator mode. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/pipeline.cpp b/indra/newview/pipeline.cpp
+index ff35de9..a0cb2f8 100644
+--- a/indra/newview/pipeline.cpp
++++ b/indra/newview/pipeline.cpp
+@@ -22,6 +22,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the window's
++ * frames (IbashoAgent hideAvatars). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+diff --git a/indra/newview/res/viewerRes.rc b/indra/newview/res/viewerRes.rc
+index cfd5775..5f03735 100644
+--- a/indra/newview/res/viewerRes.rc
++++ b/indra/newview/res/viewerRes.rc
+@@ -1,4 +1,6 @@
+ // Microsoft Visual C++ generated resource script.
++// Modified for Ibasho (2026-10-22): version resources and the splash say Ibasho. Changes are marked
++// "Ibasho".
+ //
+ #include "resource.h"
+ 
+diff --git a/indra/newview/skins/default/xui/da/strings.xml b/indra/newview/skins/default/xui/da/strings.xml
+index 35916b5..2634a69 100644
+--- a/indra/newview/skins/default/xui/da/strings.xml
++++ b/indra/newview/skins/default/xui/da/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SUPPORT_SITE">
+diff --git a/indra/newview/skins/default/xui/de/floater_about.xml b/indra/newview/skins/default/xui/de/floater_about.xml
+index e431b89..3a1bdf6 100644
+--- a/indra/newview/skins/default/xui/de/floater_about.xml
++++ b/indra/newview/skins/default/xui/de/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="INFO ÜBER [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="Info" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/de/strings.xml b/indra/newview/skins/default/xui/de/strings.xml
+index 39136e0..e261d00 100644
+--- a/indra/newview/skins/default/xui/de/strings.xml
++++ b/indra/newview/skins/default/xui/de/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+diff --git a/indra/newview/skins/default/xui/en/floater_about.xml b/indra/newview/skins/default/xui/en/floater_about.xml
+index fa9d444..fe1d8c3 100644
+--- a/indra/newview/skins/default/xui/en/floater_about.xml
++++ b/indra/newview/skins/default/xui/en/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): credits and licenses for Ibasho (base credited, Havok, Kakadu and Siren14 lines dropped, artwork notice). Changes are marked "Ibasho". -->
+ <floater
+  positioning="centered"
+  legacy_header_height="18"
+diff --git a/indra/newview/skins/default/xui/en/panel_login.xml b/indra/newview/skins/default/xui/en/panel_login.xml
+index 0167fce..0507f3d 100644
+--- a/indra/newview/skins/default/xui/en/panel_login.xml
++++ b/indra/newview/skins/default/xui/en/panel_login.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): a line with the viewer's name and version. Changes are marked "Ibasho". -->
+ <panel
+   follows="all"
+   height="768"
+diff --git a/indra/newview/skins/default/xui/en/strings.xml b/indra/newview/skins/default/xui/en/strings.xml
+index 19dc9ec..21fd9d1 100644
+--- a/indra/newview/skins/default/xui/en/strings.xml
++++ b/indra/newview/skins/default/xui/en/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the app name is Ibasho; the About header names the base and says who doesn't support it. Changes are marked "Ibasho". -->
+ <!-- This file contains strings that used to be hardcoded in the source.
+      It is only for those strings which do not belong in a floater.
+      For example, the strings used in avatar chat bubbles, and strings
+diff --git a/indra/newview/skins/default/xui/es/floater_about.xml b/indra/newview/skins/default/xui/es/floater_about.xml
+index bd87e34..71bd6fd 100644
+--- a/indra/newview/skins/default/xui/es/floater_about.xml
++++ b/indra/newview/skins/default/xui/es/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="ACERCA DE [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="Información" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/es/strings.xml b/indra/newview/skins/default/xui/es/strings.xml
+index 0d44aa7..e3f8c1c 100644
+--- a/indra/newview/skins/default/xui/es/strings.xml
++++ b/indra/newview/skins/default/xui/es/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SUPPORT_SITE">
+diff --git a/indra/newview/skins/default/xui/fr/floater_about.xml b/indra/newview/skins/default/xui/fr/floater_about.xml
+index 1d8250b..be2d86a 100644
+--- a/indra/newview/skins/default/xui/fr/floater_about.xml
++++ b/indra/newview/skins/default/xui/fr/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="À PROPOS DE [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="Infos" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/fr/strings.xml b/indra/newview/skins/default/xui/fr/strings.xml
+index 5ff24eb..2542f59 100644
+--- a/indra/newview/skins/default/xui/fr/strings.xml
++++ b/indra/newview/skins/default/xui/fr/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+diff --git a/indra/newview/skins/default/xui/it/floater_about.xml b/indra/newview/skins/default/xui/it/floater_about.xml
+index c8d17d0..9d70b2e 100644
+--- a/indra/newview/skins/default/xui/it/floater_about.xml
++++ b/indra/newview/skins/default/xui/it/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="INFO [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="Informazioni" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/it/strings.xml b/indra/newview/skins/default/xui/it/strings.xml
+index f4133e1..b16e886 100644
+--- a/indra/newview/skins/default/xui/it/strings.xml
++++ b/indra/newview/skins/default/xui/it/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+diff --git a/indra/newview/skins/default/xui/ja/floater_about.xml b/indra/newview/skins/default/xui/ja/floater_about.xml
+index f1fb730..ac063fb 100644
+--- a/indra/newview/skins/default/xui/ja/floater_about.xml
++++ b/indra/newview/skins/default/xui/ja/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="[CAPITALIZED_APP_NAME]について">
+ 	<tab_container name="about_tab">
+ 		<panel label="情報" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/ja/strings.xml b/indra/newview/skins/default/xui/ja/strings.xml
+index 34acf12..7e8cbf1 100644
+--- a/indra/newview/skins/default/xui/ja/strings.xml
++++ b/indra/newview/skins/default/xui/ja/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+diff --git a/indra/newview/skins/default/xui/pl/floater_about.xml b/indra/newview/skins/default/xui/pl/floater_about.xml
+index 138f2bd..897f058 100644
+--- a/indra/newview/skins/default/xui/pl/floater_about.xml
++++ b/indra/newview/skins/default/xui/pl/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes" ?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="O [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="Informacje" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/pt/floater_about.xml b/indra/newview/skins/default/xui/pt/floater_about.xml
+index 2163526..f09047f 100644
+--- a/indra/newview/skins/default/xui/pt/floater_about.xml
++++ b/indra/newview/skins/default/xui/pt/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="SOBRE [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="Info" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/pt/strings.xml b/indra/newview/skins/default/xui/pt/strings.xml
+index 8a4d2d9..be8937a 100644
+--- a/indra/newview/skins/default/xui/pt/strings.xml
++++ b/indra/newview/skins/default/xui/pt/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SUPPORT_SITE">
+diff --git a/indra/newview/skins/default/xui/ru/floater_about.xml b/indra/newview/skins/default/xui/ru/floater_about.xml
+index e3800bc..f2f08cd 100644
+--- a/indra/newview/skins/default/xui/ru/floater_about.xml
++++ b/indra/newview/skins/default/xui/ru/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="О [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="Данные" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/ru/strings.xml b/indra/newview/skins/default/xui/ru/strings.xml
+index 3c06222..0f642c9 100644
+--- a/indra/newview/skins/default/xui/ru/strings.xml
++++ b/indra/newview/skins/default/xui/ru/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+diff --git a/indra/newview/skins/default/xui/tr/floater_about.xml b/indra/newview/skins/default/xui/tr/floater_about.xml
+index 1598ad5..c8a17d7 100644
+--- a/indra/newview/skins/default/xui/tr/floater_about.xml
++++ b/indra/newview/skins/default/xui/tr/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="[CAPITALIZED_APP_NAME] HAKKINDA">
+ 	<tab_container name="about_tab">
+ 		<panel label="Bilgi" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/tr/strings.xml b/indra/newview/skins/default/xui/tr/strings.xml
+index 9ab3573..5cd1a9f 100644
+--- a/indra/newview/skins/default/xui/tr/strings.xml
++++ b/indra/newview/skins/default/xui/tr/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+diff --git a/indra/newview/skins/default/xui/zh/floater_about.xml b/indra/newview/skins/default/xui/zh/floater_about.xml
+index c026b70..4bfa271 100644
+--- a/indra/newview/skins/default/xui/zh/floater_about.xml
++++ b/indra/newview/skins/default/xui/zh/floater_about.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <floater name="floater_about" title="關於 [CAPITALIZED_APP_NAME]">
+ 	<tab_container name="about_tab">
+ 		<panel label="資訊" name="support_panel">
+diff --git a/indra/newview/skins/default/xui/zh/strings.xml b/indra/newview/skins/default/xui/zh/strings.xml
+index 1c8d717..a3b1983 100644
+--- a/indra/newview/skins/default/xui/zh/strings.xml
++++ b/indra/newview/skins/default/xui/zh/strings.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader overrides removed, so the English (Ibasho) ones apply. Changes are marked "Ibasho". -->
+ <strings>
+ 	<string name="SECOND_LIFE">
+ 		第二人生
+diff --git a/indra/newview/viewer_manifest.py b/indra/newview/viewer_manifest.py
+index 20cf78f..ee2b8db 100755
+--- a/indra/newview/viewer_manifest.py
++++ b/indra/newview/viewer_manifest.py
+@@ -26,6 +26,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+ $/LicenseInfo$
+ """
++# Modified for Ibasho (2026-10-22): app, executable and installer names (Ibasho, IbashoViewer.exe).
++# Changes are marked "Ibasho".
+ import errno
+ import glob
+ import itertools

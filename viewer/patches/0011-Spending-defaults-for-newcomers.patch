@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Thu, 22 Oct 2026 22:04:32 +0000
+Subject: [PATCH 11/25] Spending defaults for newcomers
+
+IbashoMaxPayment 100 (was 500) and IbashoMaxSessionSpend 500 (was 0, off).
+A new agent's account usually holds a few hundred L$ at most; L$100 covers
+tips, donation jars and most small purchases, and L$500 a session bounds
+what a misunderstanding or a manipulative message can cost before the
+person running it notices. IbashoMaxUploadCost stays 50 (a texture or a
+small mesh). All three are persisted settings the person can raise.
+---
+ indra/newview/app_settings/settings.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index d1277cc..47e22a7 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -11935,7 +11935,7 @@
+       <key>Type</key>
+       <string>S32</string>
+       <key>Value</key>
+-      <integer>500</integer>
++      <integer>100</integer>
+     </map>
+     <key>IbashoSpectator</key>
+     <map>
+@@ -11957,7 +11957,7 @@
+       <key>Type</key>
+       <string>S32</string>
+       <key>Value</key>
+-      <integer>0</integer>
++      <integer>500</integer>
+     </map>
+     <key>IbashoMaxUploadCost</key>
+     <map>

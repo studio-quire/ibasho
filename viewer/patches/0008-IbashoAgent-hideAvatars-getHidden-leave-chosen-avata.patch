@@ -1,0 +1,566 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 02:07:58 +0000
+Subject: [PATCH 08/25] IbashoAgent hideAvatars/getHidden: leave chosen avatars
+ out of the window's frames
+
+Hiding in the window only: hidden avatars (body, impostor, shadow,
+attachments incl. rigged, attached lights, particles from them, name tag
+and hover text) are skipped in renders for the window, so a screen capture
+never shows them. Snapshots (gSnapshot) and impostor renders still draw
+them, so the agent's own snapshots see everyone. Culling and texture
+loading are untouched. Modes: off, list (hide ids), all_except (hide
+everyone but me and except).
+---
+ indra/newview/ibashoagent.cpp        | 224 +++++++++++++++++++++++++++
+ indra/newview/ibashohide.h           |  72 +++++++++
+ indra/newview/lldrawpoolalpha.cpp    |   3 +-
+ indra/newview/lldrawpoolavatar.cpp   |  15 ++
+ indra/newview/llhudobject.cpp        |   3 +-
+ indra/newview/llspatialpartition.cpp |   2 +
+ indra/newview/llvopartgroup.cpp      |  12 +-
+ indra/newview/pipeline.cpp           |  18 ++-
+ 8 files changed, 344 insertions(+), 5 deletions(-)
+ create mode 100644 indra/newview/ibashohide.h
+
+diff --git a/indra/newview/ibashoagent.cpp b/indra/newview/ibashoagent.cpp
+index 072df41..d422010 100644
+--- a/indra/newview/ibashoagent.cpp
++++ b/indra/newview/ibashoagent.cpp
+@@ -25,6 +25,7 @@
+ #include "llviewerprecompiledheaders.h"
+ #include "ibashocommon.h"
+ #include "ibashohooks.h"
++#include "ibashohide.h"
+ 
+ #include "llagent.h"
+ #include "llagentbenefits.h"
+@@ -76,6 +77,12 @@
+ #include "llviewerregion.h"
+ #include "llvoavatarself.h"
+ #include "llworld.h"
++#include "llcharacter.h"
++#include "lldrawable.h"
++#include "llspatialpartition.h"
++#include "llviewerpartsim.h"
++#include "llviewerpartsource.h"
++#include "llvopartgroup.h"
+ #include "pipeline.h"
+ #include "message.h"
+ 
+@@ -83,6 +90,9 @@
+ #include <map>
+ #include <optional>
+ #include <set>
++#include <unordered_set>
++
++extern bool gSnapshot; // llviewerdisplay.cpp: the current display() is for a snapshot
+ 
+ void send_lures(const LLSD& notification, const LLSD& response); // llviewermessage.cpp
+ void handle_rebake_textures();                                  // llviewermenu.cpp
+@@ -666,6 +676,18 @@ public:
+             "exists; errors carry the floater's [\"log\"].",
+             [](const LLSD& data) { ibasho::uploadMesh(data); },
+             llsd::map("path", LLSD()));
++        add("hideAvatars",
++            "Don't draw chosen avatars in the window (so not on a screen capture of it): body, attachments (rigged\n"
++            "too), their attached lights and particles, name tag and hover text. Snapshots still show them unless\n"
++            "[\"in_snapshots\"] is true. [\"mode\"]: \"off\", \"list\" (hide [\"ids\"]) or \"all_except\" (hide\n"
++            "everyone but me and [\"except\"], newcomers included). Each list given replaces the last; both are\n"
++            "kept across mode changes. Not saved: a restart starts with it off. Sounds are untouched.\n"
++            "Replies as getHidden, plus [\"grew\"]: whether anyone may have become hidden by this call.",
++            [](const LLSD& data) { ibasho::hideAvatars(data); });
++        add("getHidden",
++            "Avatar hiding state: {mode, ids, except, in_snapshots, hidden_now: [avatar ids hidden at the\n"
++            "moment], shown_now: [the other avatars the viewer knows of, not me]}.",
++            [](const LLSD& data) { ibasho::getHidden(data); });
+     }
+ 
+ private:
+@@ -1347,3 +1369,205 @@ void ibasho::onInjectedMouse(const LLCoordGL& pos)
+         gViewerWindow->getWindow()->setCursorPosition(LLCoordWindow(pos.convert()));
+ #endif
+ }
++
++// hideAvatars (2026-10-12, Claude Opus 5.5): avatar hiding in the window only; see ibashohide.h for where it hooks in.
++bool ibasho::gHideActive = false;
++
++namespace
++{
++namespace hide
++{
++enum class Mode { off, list, all_except };
++Mode sMode = Mode::off;
++std::unordered_set<LLUUID> sIds;    // list mode: hide these
++std::unordered_set<LLUUID> sExcept; // all_except mode: hide everyone but me and these
++bool sInSnapshots = false;          // hide in snapshots too (default: snapshots show everyone)
++std::unordered_set<const LLDrawInfo*> sParticleInfos;
++
++const char* modeName(Mode m)
++{
++    return m == Mode::list ? "list" : m == Mode::all_except ? "all_except" : "off";
++}
++
++bool hidden(const LLVOAvatar* av)
++{
++    if (!av || av->isSelf() || av->isUIAvatar() || av->isDead())
++        return false;
++    if (av->isControlAvatar())
++    { // animesh goes with the avatar wearing it; animesh rezzed in-world stays
++        const LLVOAvatar* wearer = av->getAttachedAvatar();
++        return wearer && hidden(wearer);
++    }
++    const LLUUID& id = av->getID();
++    if (id == gAgentID)
++        return false;
++    if (sMode == Mode::list)
++        return sIds.count(id) > 0;
++    return sMode == Mode::all_except && sExcept.count(id) == 0;
++}
++
++// The avatar itself, or the avatar a prim is attached to: an attachment's root has its avatar as parent. (An
++// avatar sitting on an object is the object's child, not the other way round, so seats don't count.)
++const LLVOAvatar* wearer(const LLViewerObject* obj)
++{
++    for (int depth = 0; obj && depth < 256; ++depth)
++    {
++        if (obj->isAvatar())
++            return (const LLVOAvatar*)obj;
++        obj = (const LLViewerObject*)obj->getParent();
++    }
++    return nullptr;
++}
++
++// Renders for the window (incl. its shadows, reflections, mirrors) skip hidden avatars; snapshots and the
++// impostor renders (which make a texture, not the frame) draw them.
++bool thisRender()
++{
++    return (sInSnapshots || !gSnapshot) && !LLPipeline::sImpostorRender;
++}
++
++std::unordered_set<LLUUID> idSet(const LLSD& list)
++{
++    std::unordered_set<LLUUID> out;
++    for (const auto& v : llsd::inArray(list))
++        if (v.asUUID().notNull())
++            out.insert(v.asUUID());
++    return out;
++}
++
++LLSD idArray(const std::unordered_set<LLUUID>& ids)
++{
++    LLSD out = LLSD::emptyArray();
++    for (const auto& id : ids)
++        out.append(id);
++    return out;
++}
++
++LLSD describe()
++{
++    LLSD out = llsd::map("mode", modeName(sMode), "ids", idArray(sIds), "except", idArray(sExcept),
++                         "in_snapshots", sInSnapshots);
++    LLSD hidden_now = LLSD::emptyArray(), shown_now = LLSD::emptyArray();
++    for (LLCharacter* c : LLCharacter::sInstances)
++    {
++        LLVOAvatar* av = (LLVOAvatar*)c;
++        if (av->isDead() || av->isSelf() || av->isUIAvatar() || av->isControlAvatar())
++            continue;
++        (ibasho::gHideActive && hidden(av) ? hidden_now : shown_now).append(av->getID());
++    }
++    out["hidden_now"] = hidden_now; // avatars the viewer knows of, other than me
++    out["shown_now"] = shown_now;
++    return out;
++}
++} // namespace hide
++} // namespace
++
++bool ibasho::hideAvatarSlow(const LLVOAvatar* av)
++{
++    return hide::thisRender() && hide::hidden(av);
++}
++
++bool ibasho::hideObjectSlow(LLViewerObject* obj)
++{
++    return obj && hide::thisRender() && hide::hidden(hide::wearer(obj));
++}
++
++bool ibasho::hideGroupSlow(LLSpatialGroup* group)
++{
++    if (!group || !hide::thisRender())
++        return false;
++    LLSpatialPartition* part = group->getSpatialPartition();
++    LLSpatialBridge* bridge = part ? part->asBridge() : nullptr;
++    if (!bridge || !bridge->mDrawable)
++        return false;
++    LLViewerObject* root = bridge->mDrawable->getVObj().get();
++    return root && root->isAttachment() && hide::hidden(hide::wearer(root));
++}
++
++bool ibasho::hideParticleSlow(LLViewerObject* part_group, S32 idx)
++{
++    LLVOPartGroup* vo = dynamic_cast<LLVOPartGroup*>(part_group);
++    LLViewerPartGroup* group = vo ? vo->getViewerPartGroup() : nullptr;
++    if (!group || idx < 0 || idx >= group->getCount())
++        return false;
++    LLViewerPart* part = group->mParticles[idx];
++    if (!part || part->mPartSourcep.isNull())
++        return false;
++    return hide::hidden(hide::wearer(part->mPartSourcep->mSourceObjectp.get()));
++}
++
++bool ibasho::isHiddenDrawInfoSlow(const LLDrawInfo* info)
++{
++    return !hide::sParticleInfos.empty() && hide::sParticleInfos.count(info) > 0;
++}
++
++bool ibasho::hideDrawInfoSlow(const LLDrawInfo* info)
++{
++    return isHiddenDrawInfoSlow(info) && hide::thisRender();
++}
++
++void ibasho::markHiddenDrawInfo(const LLDrawInfo* info)
++{
++    hide::sParticleInfos.insert(info);
++}
++
++void ibasho::forgetDrawInfoSlow(const LLDrawInfo* info)
++{
++    if (!hide::sParticleInfos.empty())
++        hide::sParticleInfos.erase(info);
++}
++
++void ibasho::hideAvatars(const LLSD& request)
++{
++    const hide::Mode old_mode = hide::sMode;
++    const auto old_ids = hide::sIds;
++    const auto old_except = hide::sExcept;
++    if (request.has("mode"))
++    {
++        std::string mode = request["mode"].asString();
++        if (mode == "off")
++            hide::sMode = hide::Mode::off;
++        else if (mode == "list")
++            hide::sMode = hide::Mode::list;
++        else if (mode == "all_except")
++            hide::sMode = hide::Mode::all_except;
++        else
++        {
++            sendReply(llsd::map("error", "mode must be off, list or all_except"), request);
++            return;
++        }
++    }
++    if (request.has("ids"))
++        hide::sIds = hide::idSet(request["ids"]);
++    if (request.has("except"))
++        hide::sExcept = hide::idSet(request["except"]);
++    if (request.has("in_snapshots"))
++        hide::sInSnapshots = request["in_snapshots"].asBoolean();
++    gHideActive = hide::sMode != hide::Mode::off;
++    if (!gHideActive)
++        hide::sParticleInfos.clear(); // unmarked infos get no forget calls while off
++
++    // Whether anyone may have become hidden: a frame from before this call may still be on its way to a
++    // capture, so a caller about to show the window waits a moment.
++    bool grew = false;
++    if (hide::sMode == hide::Mode::list)
++    {
++        grew = old_mode != hide::Mode::list;
++        for (const auto& id : hide::sIds)
++            grew = grew || !old_ids.count(id);
++    }
++    else if (hide::sMode == hide::Mode::all_except)
++    {
++        grew = old_mode != hide::Mode::all_except;
++        for (const auto& id : old_except)
++            grew = grew || !hide::sExcept.count(id);
++    }
++    LLSD reply = hide::describe();
++    reply["grew"] = grew;
++    sendReply(reply, request);
++}
++
++void ibasho::getHidden(const LLSD& request)
++{
++    sendReply(hide::describe(), request);
++}
+diff --git a/indra/newview/ibashohide.h b/indra/newview/ibashohide.h
+new file mode 100644
+index 0000000..58df8c3
+--- /dev/null
++++ b/indra/newview/ibashohide.h
+@@ -0,0 +1,72 @@
++/**
++ * @file   ibashohide.h
++ * @brief  Window-only avatar hiding (IbashoAgent hideAvatars). Hooks for the render code: hidden avatars, their
++ *         attachments (rigged too), attached lights and particles, name tags and hover text are skipped in renders
++ *         for the window, so they never reach a screen capture. Snapshots (gSnapshot) and impostor renders still
++ *         draw them, so the agent's own snapshots see everyone. Culling and texture loading are left alone, so a
++ *         snapshot finds them loaded. Written by Claude Opus 5.5, 2026-10-12.
++ *
++ * $LicenseInfo:firstyear=2026&license=viewerlgpl$
++ * Ibasho viewer source code: an addition to the Second Life Viewer Source Code
++ * (Linden Research, Inc.), written for Ibasho by Claude (Anthropic) models.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation;
++ * version 2.1 of the License only.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
++ * $/LicenseInfo$
++ */
++
++#ifndef LL_IBASHOHIDE_H
++#define LL_IBASHOHIDE_H
++
++#include "stdtypes.h"
++
++class LLDrawInfo;
++class LLSD;
++class LLSpatialGroup;
++class LLViewerObject;
++class LLVOAvatar;
++
++namespace ibasho
++{
++    extern bool gHideActive; // hiding is on at all; every hook checks this first
++
++    bool hideAvatarSlow(const LLVOAvatar* av);
++    bool hideObjectSlow(LLViewerObject* obj);
++    bool hideGroupSlow(LLSpatialGroup* group);
++    bool hideParticleSlow(LLViewerObject* part_group, S32 idx);
++    bool hideDrawInfoSlow(const LLDrawInfo* info);
++    bool isHiddenDrawInfoSlow(const LLDrawInfo* info);
++    void markHiddenDrawInfo(const LLDrawInfo* info);
++    void forgetDrawInfoSlow(const LLDrawInfo* info);
++
++    // Skip drawing this in the current render? (The avatar body, its impostor and shadow.)
++    inline bool hideAvatarNow(const LLVOAvatar* av) { return gHideActive && hideAvatarSlow(av); }
++    // An avatar, or any prim attached to one (name tags, hover text, attached lights).
++    inline bool hideObjectNow(LLViewerObject* obj) { return gHideActive && hideObjectSlow(obj); }
++    // A spatial group in an attachment's bridge (everything attachments draw through the render maps).
++    inline bool hideGroupNow(LLSpatialGroup* group) { return gHideActive && hideGroupSlow(group); }
++
++    // Particles share vertex buffers across sources, so LLParticlePartition::getGeometry gives particles from
++    // hidden avatars (their attachments, or the avatar itself) their own draw infos and marks them; the draw
++    // loops then skip marked infos in renders for the window.
++    inline bool hideParticle(LLViewerObject* part_group, S32 idx) { return gHideActive && hideParticleSlow(part_group, idx); }
++    inline bool isHiddenDrawInfo(const LLDrawInfo* info) { return gHideActive && isHiddenDrawInfoSlow(info); }
++    inline bool hideDrawInfoNow(const LLDrawInfo* info) { return gHideActive && hideDrawInfoSlow(info); }
++    inline void forgetDrawInfo(const LLDrawInfo* info) { if (gHideActive) forgetDrawInfoSlow(info); }
++
++    void hideAvatars(const LLSD& request);
++    void getHidden(const LLSD& request);
++}
++
++#endif
+diff --git a/indra/newview/lldrawpoolalpha.cpp b/indra/newview/lldrawpoolalpha.cpp
+index 8755120..a0e1620 100644
+--- a/indra/newview/lldrawpoolalpha.cpp
++++ b/indra/newview/lldrawpoolalpha.cpp
+@@ -52,6 +52,7 @@
+ #include "gltfscenemanager.h"
+ 
+ #include "llenvironment.h"
++#include "ibashohide.h" // Ibasho
+ 
+ bool LLDrawPoolAlpha::sShowDebugAlpha = false;
+ 
+@@ -649,7 +650,7 @@ void LLDrawPoolAlpha::renderAlpha(U32 mask, bool depth_only, bool rigged)
+             for (LLSpatialGroup::drawmap_elem_t::iterator k = draw_info.begin(); k != draw_info.end(); ++k)
+             {
+                 LLDrawInfo& params = **k;
+-                if ((bool)params.mAvatar != rigged)
++                if ((bool)params.mAvatar != rigged || ibasho::hideDrawInfoNow(&params)) // Ibasho
+                 {
+                     continue;
+                 }
+diff --git a/indra/newview/lldrawpoolavatar.cpp b/indra/newview/lldrawpoolavatar.cpp
+index 9386206..62a3c05 100644
+--- a/indra/newview/lldrawpoolavatar.cpp
++++ b/indra/newview/lldrawpoolavatar.cpp
+@@ -52,6 +52,7 @@
+ #include "llviewerpartsim.h"
+ #include "llviewercontrol.h" // for gSavedSettings
+ #include "llviewertexturelist.h"
++#include "ibashohide.h" // Ibasho
+ 
+ static U32 sShaderLevel = 0;
+ 
+@@ -377,6 +378,13 @@ void LLDrawPoolAvatar::renderShadow(S32 pass)
+         return;
+     }
+ 
++    // <Ibasho>
++    if (ibasho::hideAvatarNow(avatarp))
++    {
++        return;
++    }
++    // </Ibasho>
++
+     LLVOAvatar::AvatarOverallAppearance oa = avatarp->getOverallAppearance();
+     bool impostor = !LLPipeline::sImpostorRender && avatarp->isImpostor();
+     // no shadows if the shadows are causing this avatar to breach the limit.
+@@ -706,6 +714,13 @@ void LLDrawPoolAvatar::renderAvatars(LLVOAvatar* single_avatar, S32 pass)
+         return;
+     }
+ 
++    // <Ibasho>
++    if (!single_avatar && ibasho::hideAvatarNow(avatarp))
++    {
++        return;
++    }
++    // </Ibasho>
++
+     if (!single_avatar && !avatarp->isFullyLoaded() )
+     {
+         if (pass==0 && (!gPipeline.hasRenderType(LLPipeline::RENDER_TYPE_PARTICLES) || LLViewerPartSim::getMaxPartCount() <= 0))
+diff --git a/indra/newview/llhudobject.cpp b/indra/newview/llhudobject.cpp
+index 04e9e2d..f38ba0e 100644
+--- a/indra/newview/llhudobject.cpp
++++ b/indra/newview/llhudobject.cpp
+@@ -39,6 +39,7 @@
+ #include "llhudeffectresetskeleton.h"
+ #include "llhudnametag.h"
+ #include "llvoicevisualizer.h"
++#include "ibashohide.h" // Ibasho
+ 
+ #include "llagent.h"
+ 
+@@ -289,7 +290,7 @@ void LLHUDObject::renderAll()
+         {
+             sHUDObjects.erase(cur_it);
+         }
+-        else if (hud_objp->isVisible())
++        else if (hud_objp->isVisible() && !ibasho::hideObjectNow(hud_objp->getSourceObject())) // Ibasho
+         {
+             hud_objp->render();
+         }
+diff --git a/indra/newview/llspatialpartition.cpp b/indra/newview/llspatialpartition.cpp
+index c2ac07a..6688219 100644
+--- a/indra/newview/llspatialpartition.cpp
++++ b/indra/newview/llspatialpartition.cpp
+@@ -53,6 +53,7 @@
+ #include "llvolumemgr.h"
+ #include "llviewershadermgr.h"
+ #include "llcontrolavatar.h"
++#include "ibashohide.h" // Ibasho
+ 
+ extern bool gShiftFrame;
+ 
+@@ -3838,6 +3839,7 @@ LLDrawInfo::LLDrawInfo(U16 start, U16 end, U32 count, U32 offset,
+ 
+ LLDrawInfo::~LLDrawInfo()
+ {
++    ibasho::forgetDrawInfo(this); // Ibasho
+     if (gDebugGL)
+     {
+         gPipeline.checkReferences(this);
+diff --git a/indra/newview/llvopartgroup.cpp b/indra/newview/llvopartgroup.cpp
+index ec32a79..4570ac3 100644
+--- a/indra/newview/llvopartgroup.cpp
++++ b/indra/newview/llvopartgroup.cpp
+@@ -43,6 +43,7 @@
+ #include "llviewerregion.h"
+ #include "pipeline.h"
+ #include "llspatialpartition.h"
++#include "ibashohide.h" // Ibasho
+ 
+ extern U64MicrosecondsImplicit gFrameTime;
+ 
+@@ -853,6 +854,8 @@ void LLParticlePartition::getGeometry(LLSpatialGroup* group)
+ 
+         object->getBlendFunc(facep->getTEOffset(), bf_src, bf_dst);
+ 
++        bool hidden = ibasho::hideParticle(object, facep->getTEOffset()); // Ibasho
++
+ 
+         if (idx >= 0)
+         {
+@@ -862,7 +865,8 @@ void LLParticlePartition::getGeometry(LLSpatialGroup* group)
+                 info->mHasGlow == has_glow &&
+                 info->mFullbright == fullbright &&
+                 info->mBlendFuncDst == bf_dst &&
+-                info->mBlendFuncSrc == bf_src)
++                info->mBlendFuncSrc == bf_src && // Ibasho
++                ibasho::isHiddenDrawInfo(info) == hidden) // Ibasho
+             {
+                 if (draw_vec[idx]->mEnd == facep->getGeomIndex()-1)
+                 {
+@@ -892,6 +896,12 @@ void LLParticlePartition::getGeometry(LLSpatialGroup* group)
+             info->mBlendFuncDst = bf_dst;
+             info->mBlendFuncSrc = bf_src;
+             info->mHasGlow = has_glow;
++            // <Ibasho>
++            if (hidden)
++            {
++                ibasho::markHiddenDrawInfo(info);
++            }
++            // </Ibasho>
+             draw_vec.push_back(info);
+             //for alpha sorting
+             facep->setDrawInfo(info);
+diff --git a/indra/newview/pipeline.cpp b/indra/newview/pipeline.cpp
+index ab7058b..ff35de9 100644
+--- a/indra/newview/pipeline.cpp
++++ b/indra/newview/pipeline.cpp
+@@ -121,6 +121,7 @@
+ 
+ #include "SMAAAreaTex.h"
+ #include "SMAASearchTex.h"
++#include "ibashohide.h" // Ibasho
+ #include "llerror.h"
+ 
+ #if LL_CLANG
+@@ -3632,6 +3633,13 @@ void LLPipeline::postSort(LLCamera &camera)
+             continue;
+         }
+ 
++        // <Ibasho>
++        if (ibasho::hideGroupNow(group))
++        {
++            continue;
++        }
++        // </Ibasho>
++
+         if (group->hasState(LLSpatialGroup::NEW_DRAWINFO) && group->hasState(LLSpatialGroup::GEOM_DIRTY) && !gCubeSnapshot)
+         {  // no way this group is going to be drawable without a rebuild
+             group->rebuildGeom();
+@@ -3649,6 +3657,12 @@ void LLPipeline::postSort(LLCamera &camera)
+             {
+                 LLDrawInfo *info = *k;
+ 
++                // <Ibasho>
++                if (ibasho::hideDrawInfoNow(info))
++                {
++                    continue;
++                }
++                // </Ibasho>
+                 sCull->pushDrawInfo(j->first, info);
+                 if (!sShadowRender && !sReflectionRender && !gCubeSnapshot)
+                 {
+@@ -5856,7 +5870,7 @@ void LLPipeline::setupHWLights()
+ 
+             if (light->isAttachment())
+             {
+-                if (!sRenderAttachedLights)
++                if (!sRenderAttachedLights || ibasho::hideObjectNow(light)) // Ibasho
+                 {
+                     continue;
+                 }
+@@ -8710,7 +8724,7 @@ void LLPipeline::renderDeferredLighting()
+ 
+                     if (volume->isAttachment())
+                     {
+-                        if (!sRenderAttachedLights)
++                        if (!sRenderAttachedLights || ibasho::hideObjectNow(volume)) // Ibasho
+                         {
+                             continue;
+                         }

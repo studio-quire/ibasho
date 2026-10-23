@@ -1,0 +1,760 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 00:00:06 +0000
+Subject: [PATCH 18/25] Release channel, no update checks, bug reports to
+ Ibasho
+
+The Ibasho channel counts as a release channel, so the menu bar has the
+normal colour instead of the red of Linden Lab's test builds (black on a
+grid not run by Linden Lab, as for Linden Lab's release viewer).
+
+Ibasho never asks Linden Lab's update service (VVM) about updates, never
+offers one and never downloads anything by itself; release notes don't
+pop up; Preferences says there are no updates instead of showing update
+settings; a grid that asks for a newer viewer gets "look for a newer
+Ibasho", not Linden Lab's download page. build_data.json names Ibasho as
+the channel base and has no update service.
+
+Help > Report Bug opens Ibasho's issue tracker (ReportBugURL, a
+placeholder until the project is published); Linden Lab's bug-reporting
+links are gone from the hidden Deprecated menu; the freeze and
+missing-file messages no longer send people to Linden Lab's support.
+---
+ doc/IBASHO-CHANGES.txt                        | 63 ++++++++++++++++---
+ indra/newview/app_settings/settings.xml       | 10 +--
+ indra/newview/llappviewer.cpp                 | 18 ++----
+ indra/newview/llversioninfo.cpp               |  9 ++-
+ .../skins/default/xui/de/notifications.xml    |  6 +-
+ .../skins/default/xui/en/menu_viewer.xml      | 51 +--------------
+ .../skins/default/xui/en/notifications.xml    |  6 +-
+ .../xui/en/panel_preferences_setup.xml        | 54 ++--------------
+ .../newview/skins/default/xui/en/strings.xml  |  8 ++-
+ .../skins/default/xui/es/notifications.xml    |  6 +-
+ .../skins/default/xui/fr/notifications.xml    |  6 +-
+ .../skins/default/xui/it/notifications.xml    |  6 +-
+ .../skins/default/xui/ja/notifications.xml    |  8 +--
+ .../skins/default/xui/pl/notifications.xml    |  5 +-
+ .../skins/default/xui/pt/notifications.xml    |  6 +-
+ .../skins/default/xui/ru/notifications.xml    |  6 +-
+ .../skins/default/xui/tr/notifications.xml    |  6 +-
+ .../skins/default/xui/zh/notifications.xml    |  6 +-
+ indra/newview/viewer_manifest.py              |  7 ++-
+ 19 files changed, 102 insertions(+), 185 deletions(-)
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+index 5bfa19e..931f9b0 100644
+--- a/doc/IBASHO-CHANGES.txt
++++ b/doc/IBASHO-CHANGES.txt
+@@ -23,9 +23,11 @@ indra/newview/CMakeLists.txt
+ indra/newview/VIEWER_VERSION.txt
+     Modified for Ibasho (2026-10-22): Ibasho's own version number (a data file read by CMake).
+ indra/newview/app_settings/settings.xml
+-    Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22): settings for the Ibasho LEAP APIs
+-    and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator,
+-    IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy).
++    Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23): settings for the Ibasho
++    LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost,
++    IbashoSpectator, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy); Report
++    Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up
++    (UpdaterShowReleaseNotes).
+ indra/newview/app_settings/settings_per_account.xml
+     Modified for Ibasho (2026-10-22): chat and IM transcripts off by default (LogNearbyChat,
+     KeepConversationLogTranscripts).
+@@ -56,8 +58,8 @@ indra/newview/installers/windows/uninstall_icon.BMP
+ indra/newview/installers/windows/uninstall_icon.ico
+     Replaced for Ibasho (2026-10-22) with Ibasho's own artwork (see doc/LICENSE-logos.txt).
+ indra/newview/llappviewer.cpp
+-    Modified for Ibasho (2026-10-22): the app folder is named Ibasho; the splash text uses the app
+-    name.
++    Modified for Ibasho (2026-10-22, 2026-10-23): the app folder is named Ibasho; the splash text
++    uses the app name; no update checks with Linden Lab's update service.
+ indra/newview/llappviewer.h
+     Modified for Ibasho (2026-10-22): the window class is Ibasho's own.
+ indra/newview/llappviewerwin32.cpp
+@@ -100,6 +102,9 @@ indra/newview/llspatialpartition.cpp
+ indra/newview/lluilistener.cpp
+     Modified for Ibasho (2026-10-10, 2026-10-22): UI.call replies with an error for an unknown
+     function instead of crashing.
++indra/newview/llversioninfo.cpp
++    Modified for Ibasho (2026-10-23): the Ibasho channel counts as a release channel (normal menu
++    bar colour).
+ indra/newview/llviewermessage.cpp
+     Modified for Ibasho (2026-10-10, 2026-10-22): hook: balance replies are posted to
+     IbashoEvents; payments within the spending caps.
+@@ -150,68 +155,108 @@ indra/newview/skins/default/xui/da/strings.xml
+ indra/newview/skins/default/xui/de/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/de/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/de/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/en/floater_about.xml
+     Modified for Ibasho (2026-10-22): credits and licenses for Ibasho (base credited, Havok,
+     Kakadu and Siren14 lines dropped, artwork notice).
++indra/newview/skins/default/xui/en/menu_viewer.xml
++    Modified for Ibasho (2026-10-23): Linden Lab's bug-reporting links removed from the hidden
++    Deprecated menu's Help (Help > Report Bug goes to Ibasho's issue tracker).
++indra/newview/skins/default/xui/en/notifications.xml
++    Modified for Ibasho (2026-10-23): when a grid asks for a newer viewer, RequiredUpdate doesn't
++    send people to Linden Lab's viewer download.
+ indra/newview/skins/default/xui/en/panel_login.xml
+     Modified for Ibasho (2026-10-22): a line with the viewer's name and version.
++indra/newview/skins/default/xui/en/panel_preferences_setup.xml
++    Modified for Ibasho (2026-10-23): the software update settings replaced by a line saying
++    Ibasho has no updater.
+ indra/newview/skins/default/xui/en/strings.xml
+-    Modified for Ibasho (2026-10-22): the app name is Ibasho; the About header names the base and
+-    says who doesn't support it.
++    Modified for Ibasho (2026-10-22, 2026-10-23): the app name is Ibasho; the About header names
++    the base and says who doesn't support it; the freeze and missing-file messages don't send
++    people to Linden Lab's support for Ibasho's problems.
+ indra/newview/skins/default/xui/es/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/es/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/es/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/fr/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/fr/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/fr/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/it/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/it/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/it/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/ja/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/ja/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/ja/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/pl/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/pl/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/pt/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/pt/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/pt/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/ru/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/ru/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/ru/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/tr/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/tr/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/tr/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/skins/default/xui/zh/floater_about.xml
+     Modified for Ibasho (2026-10-22): the credits intro and licenses overrides removed, so the
+     English (Ibasho) ones apply.
++indra/newview/skins/default/xui/zh/notifications.xml
++    Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho)
++    text applies.
+ indra/newview/skins/default/xui/zh/strings.xml
+     Modified for Ibasho (2026-10-22): the APP_NAME, CAPITALIZED_APP_NAME and AboutHeader
+     overrides removed, so the English (Ibasho) ones apply.
+ indra/newview/viewer_manifest.py
+-    Modified for Ibasho (2026-10-22): app, executable and installer names (Ibasho,
+-    IbashoViewer.exe).
++    Modified for Ibasho (2026-10-22, 2026-10-23): app, executable and installer names (Ibasho,
++    IbashoViewer.exe); build_data.json names Ibasho as the channel base and no update service.
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index b7256a7..1d169a9 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" ?>
+-<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy). Changes are marked "Ibasho". -->
++<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes). Changes are marked "Ibasho". -->
+ <llsd xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:noNamespaceSchemaLocation="llsd.xsd">
+ <map>
+@@ -10286,13 +10286,13 @@
+ 		<key>ReportBugURL</key>
+ 		<map>
+ 			<key>Comment</key>
+-			<string>URL used for filing bugs from viewer</string>
++			<string>Ibasho: URL used for filing bugs from the viewer (Help &gt; Report Bug): Ibasho's issue tracker, not Linden Lab's. PLACEHOLDER until the project is published: put the real repository here.</string>
+ 			<key>Persist</key>
+ 			<integer>1</integer>
+ 			<key>Type</key>
+ 			<string>String</string>
+ 			<key>Value</key>
+-			<string>https://feedback.secondlife.com/</string>
++			<string>https://github.com/OWNER/ibasho/issues</string>
+ 		</map>
+ 	<key>RevokePermsOnStopAnimation</key>
+     <map>
+@@ -13288,13 +13288,13 @@
+     <key>UpdaterShowReleaseNotes</key>
+     <map>
+         <key>Comment</key>
+-        <string>Enables displaying of the Release notes in a web floater after update. 0 - don't show, 1 - show, 2 - show even for test viewers</string>
++        <string>Enables displaying of the Release notes in a web floater after update. 0 - don't show, 1 - show, 2 - show even for test viewers. Ibasho: 0, Ibasho has no updater and Linden Lab's release notes aren't Ibasho's.</string>
+         <key>Persist</key>
+         <integer>1</integer>
+         <key>Type</key>
+         <string>S32</string>
+         <key>Value</key>
+-        <integer>1</integer>
++        <integer>0</integer>
+     </map>
+     <key>UploadBakedTexOld</key>
+     <map>
+diff --git a/indra/newview/llappviewer.cpp b/indra/newview/llappviewer.cpp
+index d9d2ac4..c2772c1 100644
+--- a/indra/newview/llappviewer.cpp
++++ b/indra/newview/llappviewer.cpp
+@@ -23,8 +23,8 @@
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
+  *
+- * Modified for Ibasho (2026-10-22): the app folder is named Ibasho; the splash text uses the app
+- * name. Changes are marked "Ibasho".
++ * Modified for Ibasho (2026-10-22, 2026-10-23): the app folder is named Ibasho; the splash text uses
++ * the app name; no update checks with Linden Lab's update service. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+@@ -1156,17 +1156,9 @@ bool LLAppViewer::init()
+ 
+     gGLActive = false;
+ 
+-#if !LL_LINUX
+-    // Launch VVM update check (Linux updater is future work: Velopack port)
+-    if (!gSavedSettings.getBOOL("CmdLineSkipUpdater") && !gNonInteractive)
+-    {
+-        initVVMUpdateCheck();
+-    }
+-    else
+-#endif
+-    {
+-        LL_WARNS("InitInfo") << "Skipping updater check." << LL_ENDL;
+-    }
++    // Ibasho: no update check. Linden Lab's update service (VVM) is for Linden Lab's viewers; Ibasho
++    // never asks it, never offers to update and never downloads anything by itself.
++    LL_INFOS("InitInfo") << "No update checks in Ibasho." << LL_ENDL;
+ 
+     {
+         // Iterate over --leap command-line options. But this is a bit tricky: if
+diff --git a/indra/newview/llversioninfo.cpp b/indra/newview/llversioninfo.cpp
+index bac291c..009e1a9 100644
+--- a/indra/newview/llversioninfo.cpp
++++ b/indra/newview/llversioninfo.cpp
+@@ -23,6 +23,9 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-23): the Ibasho channel counts as a release channel (normal menu bar
++ * colour). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+@@ -140,7 +143,11 @@ LLVersionInfo::ViewerMaturity LLVersionInfo::getViewerMaturity() const
+     static const boost::regex is_project_channel("\\bProject\\b");
+     static const boost::regex is_release_channel("\\bRelease\\b");
+ 
+-    if (ll_regex_search(channel, is_release_channel))
++    if (channel == "Ibasho") // Ibasho: its own releases; not "Second Life Release", which is Linden Lab's
++    {
++        maturity = RELEASE_VIEWER;
++    }
++    else if (ll_regex_search(channel, is_release_channel))
+     {
+         maturity = RELEASE_VIEWER;
+     }
+diff --git a/indra/newview/skins/default/xui/de/notifications.xml b/indra/newview/skins/default/xui/de/notifications.xml
+index 40b34d9..677fb3f 100644
+--- a/indra/newview/skins/default/xui/de/notifications.xml
++++ b/indra/newview/skins/default/xui/de/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">Nicht mehr anzeigen</global>
+ 	<global name="skipnexttimesessiononly">Nicht mehr anzeigen 
+@@ -1236,11 +1237,6 @@ Ersetzen Sie die Textur [TEXTURE_NUM] mit einer Bilddatei von maximal 512x512 un
+ Geben Sie das Objekt zum Verkauf frei und versuchen Sie es erneut.</notification>
+ 	<notification name="FinishedRawDownload">Raw-Terrain-Datei wurde heruntergeladen nach:
+ [DOWNLOAD_PATH].</notification>
+-	<notification name="RequiredUpdate">
+-		Für die Anmeldung ist Version [VERSION] erforderlich. 
+-Bitte laden Sie die Datei unter https://secondlife.com/support/downloads/ herunter.
+-		<usetemplate name="okbutton" yestext="OK"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		Für die Anmeldung ist Version [VERSION] erforderlich. 
+ Klicken Sie zum Herunterladen und Installieren auf OK.
+diff --git a/indra/newview/skins/default/xui/en/menu_viewer.xml b/indra/newview/skins/default/xui/en/menu_viewer.xml
+index fce8f52..2fe4a2c 100644
+--- a/indra/newview/skins/default/xui/en/menu_viewer.xml
++++ b/indra/newview/skins/default/xui/en/menu_viewer.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-23): Linden Lab's bug-reporting links removed from the hidden Deprecated menu's Help (Help > Report Bug goes to Ibasho's issue tracker). Changes are marked "Ibasho". -->
+ <menu_bar
+  bg_visible="false"
+  follows="left|top|right"
+@@ -4802,55 +4803,7 @@ function="World.EnvPreset"
+                  name="ScriptingPortal_url"
+                  parameter="WebLaunchLSLWiki,http://wiki.secondlife.com/wiki/LSL_Portal" />
+             </menu_item_call>
+-            <menu
+-             create_jump_keys="true"
+-             label="Bug Reporting"
+-             name="Bug Reporting"
+-             tear_off="true">
+-                <menu_item_call
+-                 label="Public Issue Tracker"
+-                 name="Public Issue Tracker">
+-                    <menu_item_call.on_click
+-                     function="PromptShowURL"
+-                     name="PublicIssueTracker_url"
+-                     parameter="WebLaunchPublicIssue,https://feedback.secondlife.com/" />
+-                </menu_item_call>
+-                <menu_item_call
+-                 label="Public Issue Tracker Help"
+-                 name="Publc Issue Tracker Help">
+-                    <menu_item_call.on_click
+-                     function="PromptShowURL"
+-                     name="PublicIssueTrackerHelp_url"
+-                     parameter="WebLaunchPublicIssueHelp,http://wiki.secondlife.com/wiki/Issue_tracker" />
+-                </menu_item_call>
+-
+-                <menu_item_separator/>
+-
+-                <menu_item_call
+-                 label="Bug Reporting 101"
+-                 name="Bug Reporing 101">
+-                    <menu_item_call.on_click
+-                     function="PromptShowURL"
+-                     name="BugReporting101_url"
+-                     parameter="WebLaunchBugReport101,http://wiki.secondlife.com/wiki/Bug_Reporting_101" />
+-                </menu_item_call>
+-                <menu_item_call
+-                 label="Security Issues"
+-                 name="Security Issues">
+-                    <menu_item_call.on_click
+-                     function="PromptShowURL"
+-                     name="SecurityIssues_url"
+-                     parameter="WebLaunchSecurityIssues,http://wiki.secondlife.com/wiki/Security_issues" />
+-                </menu_item_call>
+-                <menu_item_call
+-                 label="QA Wiki"
+-                 name="QA Wiki">
+-                    <menu_item_call.on_click
+-                     function="PromptShowURL"
+-                     name="QAWiki_url"
+-                     parameter="WebLaunchQAWiki,http://wiki.secondlife.com/wiki/QA_Portal" />
+-                </menu_item_call>
+-            </menu>
++            <!-- Ibasho: Linden Lab's bug-reporting links (its issue tracker and wiki pages) removed; Help > Report Bug goes to Ibasho's tracker -->
+         </menu>
+     </menu>
+ </menu_bar>
+diff --git a/indra/newview/skins/default/xui/en/notifications.xml b/indra/newview/skins/default/xui/en/notifications.xml
+index 51a42f0..e92124f 100644
+--- a/indra/newview/skins/default/xui/en/notifications.xml
++++ b/indra/newview/skins/default/xui/en/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-23): when a grid asks for a newer viewer, RequiredUpdate doesn't send people to Linden Lab's viewer download. Changes are marked "Ibasho". -->
+ <notifications>
+     <global name="skipnexttime">
+ 
+@@ -4415,12 +4416,13 @@ Finished download of raw terrain file to:
+ 
+   <!-- RequiredUpdate does not display release notes URL because we don't get
+        that from login.cgi's login failure message. -->
++  <!-- Ibasho: a newer Ibasho, not Linden Lab's download page -->
+   <notification
+    icon="alertmodal.tga"
+    name="RequiredUpdate"
+    type="alertmodal">
+-Version [VERSION] is required for login.
+-Please download from https://secondlife.com/support/downloads/
++The grid asks for a newer viewer (version [VERSION]) before you can log in.
++[APP_NAME] is not Linden Lab's viewer and doesn't update itself: look for a newer [APP_NAME] where you got this one.
+     <tag>confirm</tag>
+     <usetemplate
+      name="okbutton"
+diff --git a/indra/newview/skins/default/xui/en/panel_preferences_setup.xml b/indra/newview/skins/default/xui/en/panel_preferences_setup.xml
+index d5f2f69..cace7eb 100644
+--- a/indra/newview/skins/default/xui/en/panel_preferences_setup.xml
++++ b/indra/newview/skins/default/xui/en/panel_preferences_setup.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-23): the software update settings replaced by a line saying Ibasho has no updater. Changes are marked "Ibasho". -->
+ <panel
+  border="true"
+  follows="left|top|right|bottom"
+@@ -161,6 +162,7 @@
+     radio_style="false"
+     width="400"
+     top_pad="5"/>
++  <!-- Ibasho: no updater, so no update settings; just say so -->
+   <text
+      type="string"
+      length="1"
+@@ -168,58 +170,12 @@
+      height="10"
+      layout="topleft"
+      left="30"
+-     name="Software updates:"
++     name="ibasho_no_updates"
+      mouse_opaque="false"
+      top_pad="8"
+-     width="300">
+-    Software updates:
++     width="450">
++    Software updates: none. [APP_NAME] never checks for or installs updates.
+   </text>
+-  <combo_box
+-     control_name="UpdaterServiceSetting"
+-     follows="left|top"
+-     height="23"
+-     layout="topleft"
+-     left_delta="50"
+-     top_pad="10"
+-     name="updater_service_combobox"
+-     width="300">
+-        <combo_box.item
+-         label="Install each update automatically"
+-         name="Install_automatically"
+-         value="3" />
+-        <combo_box.item
+-         label="Ask me when an optional update is ready to install"
+-         name="Install_ask"
+-         value="1" />
+-        <combo_box.item
+-         label="Install only mandatory updates"
+-         name="Install_manual"
+-         value="0" />
+-  </combo_box>
+-  <check_box
+-    top_pad="10"
+-    enabled="true"
+-    follows="left|top"
+-    layout="topleft"
+-    height="14"
+-    control_name="UpdaterWillingToTest"
+-    label="Willing to update to Beta"
+-    left_delta="0"
+-    mouse_opaque="true"
+-    name="update_willing_to_test"
+-    width="400"/>
+-  <check_box
+-    top_pad="8"
+-    enabled="true"
+-    follows="left|top"
+-    layout="topleft"
+-    height="14"
+-    control_name="UpdaterShowReleaseNotes"
+-    label="Show Release Notes after update"
+-    left_delta="0"
+-    mouse_opaque="true"
+-    name="update_show_release_notes"
+-    width="400"/>
+   <text
+      type="string"
+      length="1"
+diff --git a/indra/newview/skins/default/xui/en/strings.xml b/indra/newview/skins/default/xui/en/strings.xml
+index 21fd9d1..6d1cae8 100644
+--- a/indra/newview/skins/default/xui/en/strings.xml
++++ b/indra/newview/skins/default/xui/en/strings.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
+-<!-- Modified for Ibasho (2026-10-22): the app name is Ibasho; the About header names the base and says who doesn't support it. Changes are marked "Ibasho". -->
++<!-- Modified for Ibasho (2026-10-22, 2026-10-23): the app name is Ibasho; the About header names the base and says who doesn't support it; the freeze and missing-file messages don't send people to Linden Lab's support for Ibasho's problems. Changes are marked "Ibasho". -->
+ <!-- This file contains strings that used to be hardcoded in the source.
+      It is only for those strings which do not belong in a floater.
+      For example, the strings used in avatar chat bubbles, and strings
+@@ -3017,8 +3017,9 @@ If this message persists, restart your computer.
+ 		[APP_NAME] appears to have frozen or crashed on the previous run.
+ Would you like to send a crash report?
+ 	</string>
++    <!-- Ibasho: Ibasho's problems go to Ibasho's tracker (Help > Report Bug), not Linden Lab's support -->
+     <string name="MBFreezeDetected">
+-        [APP_NAME] appears to have frozen. If this issue occurs regularly, please contact support at https://support.secondlife.com.
++        [APP_NAME] appears to have frozen. If this happens regularly, you can report it with Help > Report Bug. Linden Lab doesn't support [APP_NAME].
+     </string>
+ 	<string name="MBAlert">Notification</string>
+ 	<string name="MBNoDirectX">
+@@ -3057,10 +3058,11 @@ If you continue to receive this message, contact the [SUPPORT_SITE].
+ 
+ If your computer's RAM is low, quit any heavy applications before runing Second Life, allocate a page file or reduce graphical settings like draw distance.
+     </string>
++    <!-- Ibasho: reinstall Ibasho, not Linden Lab's viewer -->
+     <string name="MBMissingFile">
+         [APP_NAME] couldn't access or find some of the files it needs and will be closed.
+ 
+-Please reinstall viewer from  https://secondlife.com/support/downloads/ and contact https://support.secondlife.com if issue persists after reinstall.
++Please download [APP_NAME] again from where you got it, or build it again.
+     </string>
+ 
+     <!-- Avatar Shape Information -->
+diff --git a/indra/newview/skins/default/xui/es/notifications.xml b/indra/newview/skins/default/xui/es/notifications.xml
+index 5dee9eb..f52b720 100644
+--- a/indra/newview/skins/default/xui/es/notifications.xml
++++ b/indra/newview/skins/default/xui/es/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">No mostrarme esto otra vez</global>
+ 	<global name="skipnexttimesessiononly">No deseo ver este mensaje otra vez 
+@@ -1229,11 +1230,6 @@ Se superan en [NUM_EXCESS] los [MAX_AGENTS] permitidos en [LIST_TYPE].</notifica
+ Por favor, pon en venta el objeto y vuelve a intentarlo.</notification>
+ 	<notification name="FinishedRawDownload">Acabada la descarga del archivo raw de terreno en:
+ [DOWNLOAD_PATH].</notification>
+-	<notification name="RequiredUpdate">
+-		La versión [VERSION] es necesaria para iniciar sesión. 
+-Por favor, realiza la descarga desde https://secondlife.com/support/downloads/
+-		<usetemplate name="okbutton" yestext="Aceptar"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		La versión [VERSION] es necesaria para iniciar sesión. 
+ Haz clic en OK para descargar e instalar.
+diff --git a/indra/newview/skins/default/xui/fr/notifications.xml b/indra/newview/skins/default/xui/fr/notifications.xml
+index 9c79f28..921f3c8 100644
+--- a/indra/newview/skins/default/xui/fr/notifications.xml
++++ b/indra/newview/skins/default/xui/fr/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">Ne plus afficher</global>
+ 	<global name="skipnexttimesessiononly">Ne plus afficher 
+@@ -1219,11 +1220,6 @@ Dépasse la limite fixée à [MAX_AGENTS] [LIST_TYPE] de [NUM_EXCESS].</notifica
+ Veuillez choisir un objet à vendre et réessayer.</notification>
+ 	<notification name="FinishedRawDownload">Téléchargement du fichier de terrain raw effectué vers :
+ [DOWNLOAD_PATH].</notification>
+-	<notification name="RequiredUpdate">
+-		La version [VERSION] est nécessaire pour vous connecter. 
+-Veuillez télécharger la dernière version sur https://secondlife.com/support/downloads/
+-		<usetemplate name="okbutton" yestext="OK"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		La version [VERSION] est nécessaire pour vous connecter. 
+ Cliquez sur OK pour télécharger et installer.
+diff --git a/indra/newview/skins/default/xui/it/notifications.xml b/indra/newview/skins/default/xui/it/notifications.xml
+index 284f947..dcfe370 100644
+--- a/indra/newview/skins/default/xui/it/notifications.xml
++++ b/indra/newview/skins/default/xui/it/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">Non mostrare più la prossima volta</global>
+ 	<global name="skipnexttimesessiononly">Non mostrare più questo messaggio 
+@@ -1224,11 +1225,6 @@ Non sono consentiti caratteri di punteggiatura.</notification>
+ Imposta l'oggetto per la vendita e riprova.</notification>
+ 	<notification name="FinishedRawDownload">Hai terminato di scaricare il file del terreno nella cartella:
+ [DOWNLOAD_PATH].</notification>
+-	<notification name="RequiredUpdate">
+-		Per effettuare l'accesso è richiesta la versione [VERSION]. 
+-Scaricala dal sito https://secondlife.com/support/downloads/
+-		<usetemplate name="okbutton" yestext="OK"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		Per effettuare l'accesso è richiesta la versione [VERSION]. 
+ Fai clic su OK per scaricarla e installarla.
+diff --git a/indra/newview/skins/default/xui/ja/notifications.xml b/indra/newview/skins/default/xui/ja/notifications.xml
+index 07d6c41..ab7d03b 100644
+--- a/indra/newview/skins/default/xui/ja/notifications.xml
++++ b/indra/newview/skins/default/xui/ja/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">
+ 		次回からこのメッセージを表示しない
+@@ -2353,13 +2354,6 @@ SHA1フィンガープリント：[MD5_DIGEST]
+ 	<notification name="FinishedRawDownload">
+ 		未加工の地形ファイルをダウンロードしました：[DOWNLOAD_PATH]
+ 	</notification>
+-	<notification name="RequiredUpdate">ログインするには、バージョン[VERSION]が必要です。以下からダウンロードしてください。
+-https://secondlife.com/support/downloads/
+-    <tag>
+-			confirm
+-		</tag>
+-		<usetemplate name="okbutton" yestext="ＯＫ"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">ログインするには、バージョン[VERSION]が必要です。
+ リリースノート：[URL]
+ 
+diff --git a/indra/newview/skins/default/xui/pl/notifications.xml b/indra/newview/skins/default/xui/pl/notifications.xml
+index a8ea3c7..e8266aa 100644
+--- a/indra/newview/skins/default/xui/pl/notifications.xml
++++ b/indra/newview/skins/default/xui/pl/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8" ?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">
+ 		Nie pokazuj tego ponownie
+@@ -1556,10 +1557,6 @@ Wybierz obiekt na sprzedaż i spróbuj jeszcze raz.
+ 	<notification name="FinishedRawDownload">
+ 		Plik surowego terenu pobrany do:
+ [DOWNLOAD_PATH].
+-	</notification>
+-	<notification name="RequiredUpdate">
+-		Do zalogowania się wymagana jest wersja [VERSION].
+-Pobierz ją z https://secondlife.com/support/downloads/
+ 	</notification>
+ 	<notification name="PauseForUpdate">
+ 		Do zalogowania się wymagana jest wersja [VERSION].
+diff --git a/indra/newview/skins/default/xui/pt/notifications.xml b/indra/newview/skins/default/xui/pt/notifications.xml
+index 153109f..4e09f27 100644
+--- a/indra/newview/skins/default/xui/pt/notifications.xml
++++ b/indra/newview/skins/default/xui/pt/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" ?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">Não exibir isto novamente</global>
+ 	<global name="skipnexttimesessiononly">Não exibir isto novamente 
+@@ -1215,11 +1216,6 @@ Ultrapassa o limite de [MAX_AGENTS] [LIST_TYPE] de [NUM_EXCESS].</notification>
+ Por favor, ponha o objeto à venda e tente novamente.</notification>
+ 	<notification name="FinishedRawDownload">Download do arquivo de terreno RAW concluído em:
+ [DOWNLOAD_PATH]</notification>
+-	<notification name="RequiredUpdate">
+-		Versão [VERSION] é obrigatório para efetuar login. 
+-Baixe a versão mais recente em https://secondlife.com/support/downloads/
+-		<usetemplate name="okbutton" yestext="OK"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		Versão [VERSION] é obrigatório para efetuar login. 
+ Clique em OK para baixar e instalar
+diff --git a/indra/newview/skins/default/xui/ru/notifications.xml b/indra/newview/skins/default/xui/ru/notifications.xml
+index 96eb917..e4d961b 100644
+--- a/indra/newview/skins/default/xui/ru/notifications.xml
++++ b/indra/newview/skins/default/xui/ru/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">
+ 		Больше не показывать
+@@ -1617,11 +1618,6 @@
+ 		Завершена загрузка файла ландшафта:
+ [DOWNLOAD_PATH].
+ 	</notification>
+-	<notification name="RequiredUpdate">
+-		Для входа необходима версия [VERSION]. 
+-Скачайте обновление с веб-сайта https://secondlife.com/support/downloads/
+-		<usetemplate name="okbutton" yestext="OK"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		Для входа необходима версия [VERSION]. 
+ Нажмите OK для загрузки и установки.
+diff --git a/indra/newview/skins/default/xui/tr/notifications.xml b/indra/newview/skins/default/xui/tr/notifications.xml
+index de429f3..c1135d2 100644
+--- a/indra/newview/skins/default/xui/tr/notifications.xml
++++ b/indra/newview/skins/default/xui/tr/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">
+ 		Bunu bir daha gösterme
+@@ -1618,11 +1619,6 @@ Nesneyi satılık olarak ayarlayıp tekrar deneyin.
+ 		İşlenmemiş yüzey dosyasının şu konuma karşıdan yüklenmesi tamamlandı:
+ [DOWNLOAD_PATH].
+ 	</notification>
+-	<notification name="RequiredUpdate">
+-		Oturum açmak için [VERSION] sürümü gerekli. 
+-Lütfen https://secondlife.com/support/downloads/ adresinden indirin
+-		<usetemplate name="okbutton" yestext="Tamam"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		Oturum açmak için [VERSION] sürümü gerekli. 
+ İndirmek ve yüklemek için Tamam&apos;a tıklayın.
+diff --git a/indra/newview/skins/default/xui/zh/notifications.xml b/indra/newview/skins/default/xui/zh/notifications.xml
+index fd0b613..b3a7042 100644
+--- a/indra/newview/skins/default/xui/zh/notifications.xml
++++ b/indra/newview/skins/default/xui/zh/notifications.xml
+@@ -1,4 +1,5 @@
+ <?xml version="1.0" encoding="utf-8"?>
++<!-- Modified for Ibasho (2026-10-23): the RequiredUpdate override removed, so the English (Ibasho) text applies. Changes are marked "Ibasho". -->
+ <notifications>
+ 	<global name="skipnexttime">
+ 		不再顯示此提醒
+@@ -1604,11 +1605,6 @@ SHA1 指紋：[MD5_DIGEST]
+ 		原始地形檔案下載完成：
+ [DOWNLOAD_PATH]。
+ 	</notification>
+-	<notification name="RequiredUpdate">
+-		必須用[VERSION]版本登入。
+-請到 http://secondlife.com/support/ 下載更新版
+-		<usetemplate name="okbutton" yestext="確定"/>
+-	</notification>
+ 	<notification name="PauseForUpdate">
+ 		必須用[VERSION]版本登入。
+ 點按「確定」開始下載並安裝。
+diff --git a/indra/newview/viewer_manifest.py b/indra/newview/viewer_manifest.py
+index ee2b8db..cb95b0d 100755
+--- a/indra/newview/viewer_manifest.py
++++ b/indra/newview/viewer_manifest.py
+@@ -26,7 +26,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+ $/LicenseInfo$
+ """
+-# Modified for Ibasho (2026-10-22): app, executable and installer names (Ibasho, IbashoViewer.exe).
++# Modified for Ibasho (2026-10-22, 2026-10-23): app, executable and installer names (Ibasho,
++# IbashoViewer.exe); build_data.json names Ibasho as the channel base and no update service.
+ # Changes are marked "Ibasho".
+ import errno
+ import glob
+@@ -179,12 +180,12 @@ class ViewerManifest(LLManifest):
+ 
+             #build_data.json.  Standard with exception handling is fine.  If we can't open a new file for writing, we have worse problems
+             #platform is computed above with other arg parsing
++            # Ibasho: the channel base is Ibasho, not Linden Lab's product; no update service (Ibasho has none)
+             build_data_dict = {"Type":"viewer","Version":'.'.join(self.args['version']),
+-                            "Channel Base": CHANNEL_VENDOR_BASE,
++                            "Channel Base": self.app_name(),
+                             "Channel":self.channel_with_pkg_suffix(),
+                             "Platform":self.build_data_json_platform,
+                             "Address Size":self.address_size,
+-                            "Update Service":"https://update.secondlife.com/update",
+                             }
+             # Only store this if it's both present and non-empty
+             bugsplat_db = self.args.get('bugsplat')

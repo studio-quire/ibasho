@@ -1,0 +1,607 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 17:17:02 +0000
+Subject: [PATCH 05/25] IbashoAgent move/stop and uploadMesh
+
+move holds movement control flags from an idle callback for a set time, as held keys do but
+without window focus; llTakeControls scripts (vehicles) see them. stop ends it; move_done events.
+uploadMesh drives the model upload floater: load .dae/.gltf/.glb for the high LOD, calculate the
+fee, upload, within IbashoMaxUploadCost and the pay caps (quote mode too). One friend line in
+llfloatermodelpreview.h.
+---
+ indra/newview/CMakeLists.txt          |   2 +
+ indra/newview/ibashoagent.cpp         |  27 +++
+ indra/newview/ibashocommon.h          |   5 +
+ indra/newview/ibashomesh.cpp          | 276 ++++++++++++++++++++++++++
+ indra/newview/ibashomove.cpp          | 219 ++++++++++++++++++++
+ indra/newview/llfloatermodelpreview.h |   1 +
+ 6 files changed, 530 insertions(+)
+ create mode 100644 indra/newview/ibashomesh.cpp
+ create mode 100644 indra/newview/ibashomove.cpp
+
+diff --git a/indra/newview/CMakeLists.txt b/indra/newview/CMakeLists.txt
+index a1fc85f..107cdf6 100644
+--- a/indra/newview/CMakeLists.txt
++++ b/indra/newview/CMakeLists.txt
+@@ -758,6 +758,8 @@ set(viewer_SOURCE_FILES
+     ibashoagent.cpp
+     ibashocommon.cpp
+     ibashoim.cpp
++    ibashomesh.cpp
++    ibashomove.cpp
+     ibashoobjects.cpp
+     # </Ibasho>
+     )
+diff --git a/indra/newview/ibashoagent.cpp b/indra/newview/ibashoagent.cpp
+index 2241ff7..6180159 100644
+--- a/indra/newview/ibashoagent.cpp
++++ b/indra/newview/ibashoagent.cpp
+@@ -453,6 +453,33 @@ public:
+             "Replies {visible} (the state after any change).",
+             &IbashoAgentListener::renderUI,
+             llsd::map("reply", LLSD()));
++        add("move",
++            "Hold movement controls for [\"secs\"] (default 1, max 600), as held keys do but without needing\n"
++            "keyboard focus; scripts that took controls (vehicles) see them like keys. [\"forward\"] -1..1\n"
++            "(back/forward), [\"strafe\"] -1..1 (+ right), [\"up\"] -1..1 (jump or fly up / crouch or fly down),\n"
++            "each held at full while |v| >= 0.5, as a key tap's slower nudge below that (OpenSim hands\n"
++            "nudges to scripts as the full control); [\"turn\"] deg/s (+ right/clockwise; a held turn key\n"
++            "is 90). [\"run\"] runs meanwhile,\n"
++            "[\"fly\"] true/false sets flying first, [\"face\"] a compass bearing (0 N, 90 E) to face first.\n"
++            "The camera is left alone. A new move replaces the current one. Replies at the start {id, pos,\n"
++            "region, heading, sitting, flying}, or with [\"wait\"] at the end. The end also posts an IbashoEvents\n"
++            "{event: \"move_done\", id, reason (time|stop|replaced|locked), secs, moved (m), pos, ...}.",
++            [](const LLSD& data) { ibasho::move(data); });
++        add("stop",
++            "Stop the current move now. Replies {was_moving, pos, ...} (the move_done info if it was moving).",
++            [](const LLSD& data) { ibasho::stopMove(data); });
++        add("uploadMesh",
++            "Upload a model (.dae, .gltf, .glb) through the model upload floater, as picking the file for\n"
++            "the high LOD does: lower LODs and physics as the floater generates them by default, then\n"
++            "\"Calculate weights & fee\", then \"Upload\". Optional [\"name\"] (default: from the file),\n"
++            "[\"scale\"] (import scale), [\"textures\"] (also upload its textures; costs more), [\"folder_id\"]\n"
++            "(default Objects), [\"timeout\"] (s, default 180), [\"keep_open\"] (leave the floater open).\n"
++            "Refused if the fee is over [\"max_cost\"], IbashoMaxUploadCost, or the pay caps. [\"quote\"]: stop\n"
++            "after calculating. Replies {name, cost, weights {land_impact, streaming, physics, server,\n"
++            "price_breakdown}, refusal?} for a quote, else adds {item_id, asset_id, charged} once the item\n"
++            "exists; errors carry the floater's [\"log\"].",
++            [](const LLSD& data) { ibasho::uploadMesh(data); },
++            llsd::map("path", LLSD()));
+     }
+ 
+ private:
+diff --git a/indra/newview/ibashocommon.h b/indra/newview/ibashocommon.h
+index 9fd5093..21cf075 100644
+--- a/indra/newview/ibashocommon.h
++++ b/indra/newview/ibashocommon.h
+@@ -57,6 +57,11 @@ namespace ibasho
+     std::string spendRefusal(S32 amount);
+     void recordSpend(S32 amount);
+     S32 spentThisSession();
++
++    // IbashoAgent ops that live in their own files (ibashomove.cpp, ibashomesh.cpp).
++    void move(const LLSD& request);
++    void stopMove(const LLSD& request);
++    void uploadMesh(const LLSD& request);
+ }
+ 
+ #endif
+diff --git a/indra/newview/ibashomesh.cpp b/indra/newview/ibashomesh.cpp
+new file mode 100644
+index 0000000..1d2ce08
+--- /dev/null
++++ b/indra/newview/ibashomesh.cpp
+@@ -0,0 +1,276 @@
++/**
++ * @file   ibashomesh.cpp
++ * @brief  IbashoAgent uploadMesh: the model upload floater, driven without its file dialog.
++ *         Written by Claude Opus 5.5, 2026-10-10.
++ *
++ * $LicenseInfo:firstyear=2026&license=viewerlgpl$
++ * Ibasho viewer source code: an addition to the Second Life Viewer Source Code
++ * (Linden Research, Inc.), written for Ibasho by Claude (Anthropic) models.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation;
++ * version 2.1 of the License only.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
++ * $/LicenseInfo$
++ */
++
++#include "llviewerprecompiledheaders.h"
++#include "ibashocommon.h"
++#include "ibashohooks.h"
++
++#include "llbutton.h"
++#include "llfloatermodelpreview.h"
++#include "llfloaterreg.h"
++#include "llinventorymodel.h"
++#include "lllineeditor.h"
++#include "llmodelloader.h"
++#include "llmodelpreview.h"
++#include "llevents.h"
++#include "llsdutil.h"
++#include "lltimer.h"
++#include "llviewercontrol.h"
++#include "llviewerinventory.h"
++#include "llviewertexteditor.h"
++
++// Does what a resident does in the floater: pick the file for the high LOD (lower LODs and physics
++// as the floater generates them by default), press "Calculate weights & fee", then "Upload". It's a
++// friend of LLFloaterModelPreview so it can call the same handlers the buttons do.
++class IbashoMeshAccess
++{
++public:
++    enum Stage { LOADING, CALCULATING, UPLOADING, FINDING_ITEM };
++
++    struct State
++    {
++        LLHandle<LLFloater> floater;
++        Stage stage = LOADING;
++        bool quote = false, keep_open = false;
++        S32 max_cost = -1;
++        S32 ready_frames = 0;
++        time_t start = 0;
++        std::string name;
++        LLUUID folder_id;
++        LLSD fee;
++    };
++    typedef std::shared_ptr<State> state_t;
++
++    static LLFloaterModelPreview* floater(const state_t& s)
++    {
++        return dynamic_cast<LLFloaterModelPreview*>(s->floater.get());
++    }
++
++    static std::string log(LLFloaterModelPreview* fmp)
++    {
++        std::string text = fmp && fmp->mUploadLogText ? fmp->mUploadLogText->getText() : std::string();
++        LLStringUtil::trim(text);
++        return text.size() > 1500 ? text.substr(text.size() - 1500) : text;
++    }
++
++    static void close(const state_t& s)
++    {
++        // Closing deletes the preview; a loader still running would then call back into it and crash.
++        LLFloaterModelPreview* fmp = floater(s);
++        if (fmp && !s->keep_open && !fmp->isModelLoading())
++            fmp->closeFloater(false);
++    }
++
++    static bool fail(LLSD& reply, const state_t& s, const std::string& error)
++    {
++        reply["error"] = error;
++        std::string text = log(floater(s));
++        if (!text.empty())
++            reply["log"] = text;
++        close(s);
++        return true;
++    }
++
++    static LLSD weights(const LLSD& fee)
++    {
++        return llsd::map("land_impact", fee["resource_cost"], "streaming", fee["model_streaming_cost"],
++                         "physics", fee["physics_cost"], "server", fee["simulation_cost"],
++                         "price_breakdown", fee["upload_price_breakdown"]);
++    }
++
++    static std::string refusal(const state_t& s, S32 cost)
++    {
++        S32 cap = gSavedSettings.getS32("IbashoMaxUploadCost");
++        if (s->max_cost >= 0 && cost > s->max_cost)
++            return llformat("the fee is L$%d, over max_cost L$%d", cost, s->max_cost);
++        if (cost > cap)
++            return llformat("the fee is L$%d, over the upload cap of L$%d (IbashoMaxUploadCost)", cost, cap);
++        return ibasho::spendRefusal(cost);
++    }
++
++    static LLViewerInventoryItem* findItem(const state_t& s)
++    {
++        // The new item lands straight in the destination folder (default: Objects).
++        LLUUID folder = s->folder_id.notNull() ? s->folder_id
++                                               : gInventory.findUserDefinedCategoryUUIDForType(LLFolderType::FT_OBJECT);
++        LLInventoryModel::cat_array_t* cats = nullptr;
++        LLInventoryModel::item_array_t* items = nullptr;
++        gInventory.getDirectDescendentsOf(folder, cats, items);
++        LLViewerInventoryItem* best = nullptr;
++        if (!items)
++            return nullptr;
++        for (const auto& item : *items)
++        {
++            if (item && item->getType() == LLAssetType::AT_OBJECT && item->getName() == s->name &&
++                item->getCreationDate() >= s->start - 5 && (!best || item->getCreationDate() > best->getCreationDate()))
++                best = item.get();
++        }
++        return best;
++    }
++
++    static void start(const LLSD& data)
++    {
++        auto reply_error = [&data](const std::string& e) { sendReply(llsd::map("error", e), data); };
++        const std::string path = data["path"].asString();
++        if (!gDirUtilp->fileExists(path))
++            return reply_error("no such file: " + path);
++        std::string ext = gDirUtilp->getExtension(path);
++        if (ext != "dae" && ext != "gltf" && ext != "glb")
++            return reply_error("the model floater reads .dae, .gltf and .glb");
++        LLUUID folder_id = data["folder_id"].asUUID();
++        if (folder_id.notNull() && !gInventory.getCategory(folder_id))
++            return reply_error("no such folder");
++        LLFloaterModelPreview* open = LLFloaterReg::findTypedInstance<LLFloaterModelPreview>("upload_model");
++        if (open && (open->getVisible() || open->isModelLoading()))
++            return reply_error("the model upload floater is already open; close it first "
++                               "(LLFloaterReg hideInstance {\"name\":\"upload_model\"})");
++
++        LLFloaterModelPreview* fmp = LLFloaterReg::getTypedInstance<LLFloaterModelPreview>("upload_model");
++        if (!fmp || !fmp->mModelPreview)
++            return reply_error("couldn't make the model upload floater");
++        auto s = std::make_shared<State>();
++        s->floater = fmp->getHandle();
++        s->quote = data["quote"].asBoolean();
++        s->keep_open = data["keep_open"].asBoolean();
++        s->max_cost = data.has("max_cost") ? data["max_cost"].asInteger() : -1;
++        s->start = time_corrected();
++        s->folder_id = folder_id;
++
++        fmp->setUploadDestination(folder_id);
++        if (data.has("name"))
++            fmp->getChild<LLLineEditor>("description_form")->setText(data["name"].asString());
++        if (data.has("scale"))
++            fmp->getChild<LLUICtrl>("import_scale")->setValue(data["scale"].asReal());
++        if (data.has("textures"))
++            fmp->getChild<LLUICtrl>("upload_textures")->setValue(data["textures"].asBoolean());
++        fmp->loadModel(LLModel::LOD_HIGH, path); // opens the floater, as picking a file would
++
++        F64 timeout = data.has("timeout") ? data["timeout"].asReal() : 180.0;
++        ibasho::deferReply(data, timeout, [s](LLSD& reply, bool expired) { return poll(s, reply, expired); });
++    }
++
++    static bool poll(const state_t& s, LLSD& reply, bool expired)
++    {
++        LLFloaterModelPreview* fmp = floater(s);
++        if (expired)
++        {
++            static const char* stages[] = { "loading the model", "calculating the fee", "uploading", "waiting for the item" };
++            return fail(reply, s, std::string("timed out ") + stages[s->stage] +
++                        (s->stage >= UPLOADING ? "; the upload may still finish (watch inventory and money events)" : ""));
++        }
++        switch (s->stage)
++        {
++        case LOADING:
++        {
++            if (!fmp)
++                return fail(reply, s, "the model floater closed while loading");
++            LLModelPreview* mp = fmp->mModelPreview;
++            mp->update(); // the floater's draw() does this, but it isn't drawn while the UI is hidden
++            if (fmp->isModelLoading())
++            {
++                s->ready_frames = 0;
++                return false;
++            }
++            if (mp->getLoadState() >= LLModelLoader::ERROR_PARSING)
++                return fail(reply, s, "the model didn't load (loader state " + std::to_string(mp->getLoadState()) + ")");
++            // LOD generation continues over idle frames after the load; wait until it's been quiet a while.
++            s->ready_frames = mp->lodsReady() ? s->ready_frames + 1 : 0;
++            if (s->ready_frames < 10)
++                return false;
++            s->name = fmp->getChild<LLLineEditor>("description_form")->getText();
++            fmp->onClickCalculateBtn();
++            s->stage = CALCULATING;
++            return false;
++        }
++        case CALCULATING:
++        {
++            if (!fmp)
++                return fail(reply, s, "the model floater closed while calculating");
++            if (fmp->mCalculateBtn->getVisible()) // the fee request failed, or the model changed
++                return fail(reply, s, "calculating the fee failed");
++            if (!fmp->mModelPhysicsFee.has("upload_price") || fmp->mUploadModelUrl.empty())
++                return false;
++            s->fee = fmp->mModelPhysicsFee;
++            S32 cost = s->fee["upload_price"].asInteger();
++            reply["name"] = s->name;
++            reply["cost"] = cost;
++            reply["weights"] = weights(s->fee);
++            std::string why_not = refusal(s, cost);
++            if (!fmp->mHasUploadPerm)
++                why_not = "this account may not upload mesh (the region's MeshUploadFlag check said no)";
++            else if (!fmp->isModelUploadAllowed())
++                why_not = "the floater won't allow this model (see log)";
++            if (s->quote)
++            {
++                if (!why_not.empty())
++                {
++                    reply["refusal"] = why_not;
++                    reply["log"] = log(fmp);
++                }
++                close(s);
++                return true;
++            }
++            if (!why_not.empty())
++                return fail(reply, s, why_not);
++            LLFloaterModelPreview::onUpload(fmp);
++            s->stage = UPLOADING;
++            return false;
++        }
++        case UPLOADING:
++            // Success closes the floater; failure re-enables Upload.
++            if (fmp && fmp->getVisible())
++            {
++                if (fmp->mUploadBtn->getEnabled() || fmp->mCalculateBtn->getVisible())
++                    return fail(reply, s, "the upload failed");
++                return false;
++            }
++            ibasho::recordSpend(s->fee["upload_price"].asInteger());
++            s->stage = FINDING_ITEM;
++            [[fallthrough]];
++        case FINDING_ITEM:
++        {
++            LLViewerInventoryItem* item = findItem(s);
++            if (!item)
++                return false;
++            reply["name"] = s->name;
++            reply["item_id"] = item->getUUID();
++            reply["asset_id"] = item->getAssetUUID();
++            reply["cost"] = s->fee["upload_price"];
++            reply["charged"] = s->fee["upload_price"];
++            reply["weights"] = weights(s->fee);
++            return true;
++        }
++        }
++        return true;
++    }
++};
++
++namespace ibasho
++{
++void uploadMesh(const LLSD& data)
++{
++    IbashoMeshAccess::start(data);
++}
++}
+diff --git a/indra/newview/ibashomove.cpp b/indra/newview/ibashomove.cpp
+new file mode 100644
+index 0000000..616b521
+--- /dev/null
++++ b/indra/newview/ibashomove.cpp
+@@ -0,0 +1,219 @@
++/**
++ * @file   ibashomove.cpp
++ * @brief  IbashoAgent move/stop: hold the avatar's movement controls for a while, as held keys do,
++ *         without needing keyboard focus. Written by Claude Opus 5.5, 2026-10-10.
++ *
++ * $LicenseInfo:firstyear=2026&license=viewerlgpl$
++ * Ibasho viewer source code: an addition to the Second Life Viewer Source Code
++ * (Linden Research, Inc.), written for Ibasho by Claude (Anthropic) models.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation;
++ * version 2.1 of the License only.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
++ * $/LicenseInfo$
++ */
++
++#include "llviewerprecompiledheaders.h"
++#include "ibashocommon.h"
++#include "ibashohooks.h"
++
++#include "llagent.h"
++#include "llagentcamera.h"
++#include "lleventapi.h"
++#include "llevents.h"
++#include "llsdutil.h"
++#include "llsdutil_math.h"
++#include "lltimer.h"
++#include "llviewerregion.h"
++#include "llvoavatarself.h"
++
++// Keys set control flags while held; the main loop sends them in AgentUpdate and clears them every
++// frame (LLAgent::resetControlFlags), so we set them again from an idle callback each frame. Those
++// run after the clear and before the next send. The flags reach the region exactly as keys' do, so
++// scripts that took controls (vehicles) see them too.
++namespace ibasho
++{
++namespace
++{
++    void replyTo(const LLSD& request, const LLSD& reply) { sendReply(reply, request); }
++
++    constexpr F32 KEY_YAW_RATE = 90.f; // deg/s, what a held turn key gives (LLAgent::propagate)
++
++    struct Move
++    {
++        U32 id = 0;
++        F32 forward = 0.f, strafe = 0.f, turn = 0.f, up = 0.f; // strafe and turn: + is right
++        bool run = false;
++        F64 start = 0.0, end = 0.0;
++        LLVector3d start_pos;
++        std::shared_ptr<LLSD> done; // filled when it ends
++    };
++
++    Move sMove;
++    bool sActive = false;
++    U32 sNextId = 1;
++    bool sHooked = false;
++
++    S32 sign(F32 v) { return v > 0.f ? 1 : v < 0.f ? -1 : 0; }
++
++    F32 compassHeading()
++    {
++        LLVector3 at = gAgent.getAtAxis();
++        F32 deg = atan2f(at.mV[VX], at.mV[VY]) * RAD_TO_DEG; // 0 = north (+y), 90 = east (+x)
++        return deg < 0.f ? deg + 360.f : deg;
++    }
++
++    LLSD where()
++    {
++        LLSD out = llsd::map("pos", ll_sd_from_vector3(gAgent.getPositionAgent()),
++                             "heading", ll_round(compassHeading()),
++                             "sitting", isAgentAvatarValid() && gAgentAvatarp->isSitting(),
++                             "flying", gAgent.getFlying());
++        if (gAgent.getRegion())
++            out["region"] = gAgent.getRegion()->getName();
++        return out;
++    }
++
++    void finish(const std::string& reason)
++    {
++        if (!sActive)
++            return;
++        sActive = false;
++        if (sMove.run && !gAgent.getAlwaysRun())
++        {
++            gAgent.clearRunning();
++            gAgent.sendWalkRun(false);
++        }
++        LLSD info = where();
++        info["id"] = (S32)sMove.id;
++        info["reason"] = reason;
++        info["secs"] = LLTimer::getTotalSeconds().value() - sMove.start;
++        info["moved"] = dist_vec(gAgent.getPositionGlobal(), sMove.start_pos);
++        *sMove.done = info;
++        postEvent("move_done", info);
++    }
++
++    void hold()
++    {
++        if (!sActive)
++            return;
++        if (LLTimer::getTotalSeconds() >= sMove.end)
++            return finish("time");
++        if (gAgent.isMovementLocked())
++            return finish("locked");
++
++        // As the key handlers do (agent_push_forward etc.), minus their camera reset, so the camera
++        // stays wherever it is. Under half strength uses the nudge flags of a tapped key: slower
++        // (OpenSim hands nudges to llTakeControls scripts as the full control).
++        if (S32 d = sign(sMove.forward))
++        {
++            if (fabsf(sMove.forward) >= 0.5f)
++            {
++                gAgent.setControlFlags((d > 0 ? AGENT_CONTROL_AT_POS : AGENT_CONTROL_AT_NEG) | AGENT_CONTROL_FAST_AT);
++                gAgentCamera.setAtKey(d);
++            }
++            else
++            {
++                gAgent.setControlFlags(d > 0 ? AGENT_CONTROL_NUDGE_AT_POS : AGENT_CONTROL_NUDGE_AT_NEG);
++                gAgentCamera.setWalkKey(d);
++            }
++        }
++        if (S32 d = -sign(sMove.strafe)) // the viewer's left is positive
++        {
++            if (fabsf(sMove.strafe) >= 0.5f)
++                gAgent.setControlFlags((d > 0 ? AGENT_CONTROL_LEFT_POS : AGENT_CONTROL_LEFT_NEG) | AGENT_CONTROL_FAST_LEFT);
++            else
++                gAgent.setControlFlags(d > 0 ? AGENT_CONTROL_NUDGE_LEFT_POS : AGENT_CONTROL_NUDGE_LEFT_NEG);
++            gAgentCamera.setLeftKey(d);
++        }
++        if (S32 d = sign(sMove.up))
++        {
++            gAgent.setControlFlags((d > 0 ? AGENT_CONTROL_UP_POS : AGENT_CONTROL_UP_NEG) | AGENT_CONTROL_FAST_UP);
++            gAgentCamera.setUpKey(d);
++        }
++        if (sMove.turn != 0.f)
++            gAgent.moveYaw(-sMove.turn / KEY_YAW_RATE, false); // sets the yaw flag; propagate() turns us
++    }
++}
++
++void move(const LLSD& data)
++{
++    if (!isAgentAvatarValid() || !gAgent.getRegion())
++        return replyTo(data, llsd::map("error", "no avatar"));
++    if (gAgent.isMovementLocked())
++        return replyTo(data, llsd::map("error", "movement is locked"));
++    F64 secs = data.has("secs") ? data["secs"].asReal() : 1.0;
++    if (!(secs > 0.0 && secs <= 600.0))
++        return replyTo(data, llsd::map("error", "secs must be in (0, 600]"));
++    Move m;
++    m.forward = llclamp((F32)data["forward"].asReal(), -1.f, 1.f);
++    m.strafe = llclamp((F32)data["strafe"].asReal(), -1.f, 1.f);
++    m.up = llclamp((F32)data["up"].asReal(), -1.f, 1.f);
++    m.turn = llclamp((F32)data["turn"].asReal(), -720.f, 720.f);
++
++    if (sActive)
++        finish("replaced");
++    if (!sHooked)
++    {
++        sHooked = true;
++        onIdle(hold);
++    }
++
++    gAgent.clearAFK();
++    if (data.has("fly") && data["fly"].asBoolean() != gAgent.getFlying())
++        gAgent.setFlying(data["fly"].asBoolean());
++    if (data.has("face"))
++    {
++        F32 b = (F32)data["face"].asReal() * DEG_TO_RAD; // compass bearing
++        gAgent.resetAxes(LLVector3(sinf(b), cosf(b), 0.f));
++    }
++    m.run = data["run"].asBoolean() && !gAgent.getRunning();
++    if (m.run)
++    {
++        gAgent.setRunning();
++        gAgent.sendWalkRun(true);
++    }
++
++    m.id = sNextId++;
++    m.start = LLTimer::getTotalSeconds();
++    m.end = m.start + secs;
++    m.start_pos = gAgent.getPositionGlobal();
++    m.done = std::make_shared<LLSD>();
++    sMove = m;
++    sActive = true;
++
++    LLSD started = where();
++    started["id"] = (S32)m.id;
++    started["secs"] = secs;
++    if (!data["wait"].asBoolean())
++        return replyTo(data, started);
++    std::shared_ptr<LLSD> done = m.done;
++    deferReply(data, secs + 5.0, [done](LLSD& reply, bool expired)
++    {
++        if (done->isUndefined())
++            return false;
++        for (const auto& [k, v] : llsd::inMap(*done))
++            reply[k] = v;
++        return true;
++    });
++}
++
++void stopMove(const LLSD& data)
++{
++    bool was = sActive;
++    finish("stop");
++    LLSD out = was ? *sMove.done : where();
++    out["was_moving"] = was;
++    sendReply(out, data);
++}
++} // namespace ibasho
+diff --git a/indra/newview/llfloatermodelpreview.h b/indra/newview/llfloatermodelpreview.h
+index 20e5b26..1cbdd10 100644
+--- a/indra/newview/llfloatermodelpreview.h
++++ b/indra/newview/llfloatermodelpreview.h
+@@ -139,6 +139,7 @@ protected:
+     friend class LLModelPreview;
+     friend class LLMeshFilePicker;
+     friend class LLPhysicsDecomp;
++    friend class IbashoMeshAccess; // Ibasho: ibashomesh.cpp drives the floater over LEAP
+ 
+     void        onDescriptionKeystroke(LLUICtrl*);
+ 

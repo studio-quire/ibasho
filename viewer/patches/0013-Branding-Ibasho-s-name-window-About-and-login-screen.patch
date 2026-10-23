@@ -1,0 +1,1037 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Thu, 22 Oct 2026 22:08:38 +0000
+Subject: [PATCH 13/25] Branding: Ibasho's name, window, About and login screen
+
+- App name "Ibasho" (APP_NAME, CAPITALIZED_APP_NAME; translations fall back
+  to English for these), so the window title, menus and About say Ibasho.
+  SECOND_LIFE, the world's name, is unchanged.
+- Executable IbashoViewer.exe, installer Ibasho_<version>_<arch>, Windows
+  version resources and splash say Ibasho.
+- Own window class, single-instance mutex, settings folder and cache
+  folder ("Ibasho"), so it runs beside another viewer without sharing
+  settings, logins or cache, and SLURLs and instance checks don't cross.
+- About: credits Linden Lab's viewer as the base without implying they
+  made Ibasho, says neither Linden Lab nor Ibasho provides support, drops
+  credits for Havok, Kakadu and Vivox's codec (not in this build), and
+  carries the artwork notice and trademark line.
+- Login screen: the viewer's name and version under the controls
+  (click for About).
+---
+ indra/llfilesystem/lldir.cpp                  |  2 +-
+ indra/llwindow/llwindowwin32.cpp              |  2 +-
+ indra/newview/llappviewer.cpp                 |  4 +-
+ indra/newview/llappviewer.h                   |  2 +-
+ indra/newview/llappviewerwin32.cpp            |  2 +-
+ indra/newview/llpanellogin.cpp                |  5 +++
+ indra/newview/res/viewerRes.rc                | 16 ++++----
+ .../newview/skins/default/xui/da/strings.xml  |  4 +-
+ .../skins/default/xui/de/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/de/strings.xml  | 10 +----
+ .../skins/default/xui/en/floater_about.xml    | 18 ++++-----
+ .../skins/default/xui/en/panel_login.xml      | 13 +++++++
+ .../newview/skins/default/xui/en/strings.xml  |  9 +++--
+ .../skins/default/xui/es/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/es/strings.xml  |  8 +---
+ .../skins/default/xui/fr/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/fr/strings.xml  | 11 +-----
+ .../skins/default/xui/it/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/it/strings.xml  | 11 +-----
+ .../skins/default/xui/ja/floater_about.xml    | 37 +------------------
+ .../newview/skins/default/xui/ja/strings.xml  | 11 +-----
+ .../skins/default/xui/pl/floater_about.xml    |  5 +--
+ .../skins/default/xui/pt/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/pt/strings.xml  |  8 +---
+ .../skins/default/xui/ru/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/ru/strings.xml  | 11 +-----
+ .../skins/default/xui/tr/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/tr/strings.xml  | 11 +-----
+ .../skins/default/xui/zh/floater_about.xml    | 32 +---------------
+ .../newview/skins/default/xui/zh/strings.xml  | 11 +-----
+ indra/newview/viewer_manifest.py              | 23 +++---------
+ 31 files changed, 74 insertions(+), 416 deletions(-)
+
+diff --git a/indra/llfilesystem/lldir.cpp b/indra/llfilesystem/lldir.cpp
+index e073ba7..795ddc2 100644
+--- a/indra/llfilesystem/lldir.cpp
++++ b/indra/llfilesystem/lldir.cpp
+@@ -391,7 +391,7 @@ std::string LLDir::buildSLOSCacheDir() const
+     }
+     else
+     {
+-        res = add(getOSCacheDir(), "SecondLife");
++        res = add(getOSCacheDir(), "Ibasho"); // Ibasho: own cache folder (this runs before the app name is set)
+     }
+     return res;
+ }
+diff --git a/indra/llwindow/llwindowwin32.cpp b/indra/llwindow/llwindowwin32.cpp
+index 7f7d093..16869a3 100644
+--- a/indra/llwindow/llwindowwin32.cpp
++++ b/indra/llwindow/llwindowwin32.cpp
+@@ -4231,7 +4231,7 @@ void LLSplashScreenWin32::showImpl()
+     ShowWindow(mWindow, SW_SHOW);
+ 
+     // Should set taskbar text without creating a header for the window (caption)
+-    SetWindowText(mWindow, TEXT("Second Life"));
++    SetWindowText(mWindow, TEXT("Ibasho")); // Ibasho
+ }
+ 
+ 
+diff --git a/indra/newview/llappviewer.cpp b/indra/newview/llappviewer.cpp
+index 8b06a21..b08613d 100644
+--- a/indra/newview/llappviewer.cpp
++++ b/indra/newview/llappviewer.cpp
+@@ -695,7 +695,7 @@ LLAppViewer::LLAppViewer()
+ 
+     // Need to do this initialization before we do anything else, since anything
+     // that touches files should really go through the lldir API
+-    gDirUtilp->initAppDirs("SecondLife");
++    gDirUtilp->initAppDirs("Ibasho"); // Ibasho: own settings, logs and cache, apart from any other viewer's
+     //
+     // IMPORTANT! Do NOT put anything that will write
+     // into the log files during normal startup until AFTER
+@@ -3022,7 +3022,7 @@ bool LLAppViewer::initConfiguration()
+     {
+         std::string splash_msg;
+         LLStringUtil::format_map_t args;
+-        args["[APP_NAME]"] = LLTrans::getString("SECOND_LIFE");
++        args["[APP_NAME]"] = LLTrans::getString("APP_NAME"); // Ibasho: the viewer's name, not the world's
+         splash_msg = LLTrans::getString("StartupLoading", args);
+         LLSplashScreen::show();
+         LLSplashScreen::update(splash_msg);
+diff --git a/indra/newview/llappviewer.h b/indra/newview/llappviewer.h
+index 837b598..d956d47 100644
+--- a/indra/newview/llappviewer.h
++++ b/indra/newview/llappviewer.h
+@@ -311,7 +311,7 @@ protected:
+     // NSIS's method is somewhat unreliable since window
+     // can close long before cleanup is done.
+     // sendURLToOtherInstance also relies on this to detect if viewer is up.
+-    static constexpr const char* sWindowClass = "Second Life";
++    static constexpr const char* sWindowClass = "Ibasho"; // Ibasho: SLURLs and instance checks don't reach other viewers
+ 
+ private:
+ 
+diff --git a/indra/newview/llappviewerwin32.cpp b/indra/newview/llappviewerwin32.cpp
+index 2080d0b..3d6d17e 100644
+--- a/indra/newview/llappviewerwin32.cpp
++++ b/indra/newview/llappviewerwin32.cpp
+@@ -287,7 +287,7 @@ void nvapi_error(NvAPI_Status status)
+ bool create_app_mutex()
+ {
+     bool result = true;
+-    LPCWSTR unique_mutex_name = L"SecondLifeAppMutex";
++    LPCWSTR unique_mutex_name = L"IbashoAppMutex"; // Ibasho: runs beside another viewer without "already running"
+     HANDLE hMutex;
+     hMutex = CreateMutex(NULL, TRUE, unique_mutex_name);
+     if (GetLastError() == ERROR_ALREADY_EXISTS)
+diff --git a/indra/newview/llpanellogin.cpp b/indra/newview/llpanellogin.cpp
+index 9b5a339..9b7ee0e 100644
+--- a/indra/newview/llpanellogin.cpp
++++ b/indra/newview/llpanellogin.cpp
+@@ -314,6 +314,11 @@ LLPanelLogin::LLPanelLogin(const LLRect &rect,
+     std::string channel = LLVersionInfo::instance().getChannel();
+     std::string version = stringize(LLVersionInfo::instance().getShortVersion(), " (",
+                                     LLVersionInfo::instance().getBuild(), ')');
++    // <Ibasho> show the viewer's name and version (TPV policy 1g)
++    LLTextBox* version_text = getChild<LLTextBox>("version_text");
++    version_text->setText(stringize(channel, ' ', LLVersionInfo::instance().getVersion()));
++    version_text->setClickedCallback(onClickVersion, NULL);
++    // </Ibasho>
+ 
+     LLTextBox* forgot_password_text = getChild<LLTextBox>("forgot_password_text");
+     forgot_password_text->setClickedCallback(onClickForgotPassword, NULL);
+diff --git a/indra/newview/res/viewerRes.rc b/indra/newview/res/viewerRes.rc
+index c9ca758..cfd5775 100644
+--- a/indra/newview/res/viewerRes.rc
++++ b/indra/newview/res/viewerRes.rc
+@@ -68,7 +68,7 @@ STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE
+ FONT 8, "MS Sans Serif"
+ BEGIN
+     ICON            IDI_LL_ICON,IDC_STATIC,7,7,20,20
+-    LTEXT           "Loading Second Life...",666,36,13,211,8
++    LTEXT           "Loading Ibasho...",666,36,13,211,8 // Ibasho
+ END
+ 
+ 
+@@ -153,14 +153,16 @@ BEGIN
+     BEGIN
+         BLOCK "040904b0"
+         BEGIN
+-            VALUE "CompanyName", "Linden Lab"
+-            VALUE "FileDescription", "Second Life"
++            // <Ibasho> Ibasho's name; the copyright line keeps Linden Lab's, whose code most of this is
++            VALUE "CompanyName", "Ibasho"
++            VALUE "FileDescription", "Ibasho"
+             VALUE "FileVersion", "${VIEWER_VERSION_MAJOR}.${VIEWER_VERSION_MINOR}.${VIEWER_VERSION_PATCH}.${VIEWER_VERSION_REVISION}"
+-            VALUE "InternalName", "Second Life"
+-            VALUE "LegalCopyright", "Copyright (c) 2026, Linden Research, Inc."
+-            VALUE "OriginalFilename", "SecondLife.exe"
+-            VALUE "ProductName", "Second Life"
++            VALUE "InternalName", "Ibasho"
++            VALUE "LegalCopyright", "Based on the Second Life viewer, Copyright (c) 2026, Linden Research, Inc. LGPL 2.1."
++            VALUE "OriginalFilename", "IbashoViewer.exe"
++            VALUE "ProductName", "Ibasho"
+             VALUE "ProductVersion", "${VIEWER_VERSION_MAJOR}.${VIEWER_VERSION_MINOR}.${VIEWER_VERSION_PATCH}.${VIEWER_VERSION_REVISION}"
++            // </Ibasho>
+         END
+     END
+     BLOCK "VarFileInfo"
+diff --git a/indra/newview/skins/default/xui/da/strings.xml b/indra/newview/skins/default/xui/da/strings.xml
+index e549958..35916b5 100644
+--- a/indra/newview/skins/default/xui/da/strings.xml
++++ b/indra/newview/skins/default/xui/da/strings.xml
+@@ -1,8 +1,6 @@
+ <?xml version="1.0" encoding="utf-8" standalone="yes"?>
+ <strings>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SUPPORT_SITE">
+ 		Second Life Support Portal
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/de/floater_about.xml b/indra/newview/skins/default/xui/de/floater_about.xml
+index 1d56e21..e431b89 100644
+--- a/indra/newview/skins/default/xui/de/floater_about.xml
++++ b/indra/newview/skins/default/xui/de/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="Nach Updates suchen" name="update_btn"/>
+ 		</panel>
+ 		<panel label="Danksagung" name="credits_panel">
+-			<text name="linden_intro">Second Life wird präsentiert von den Lindens 
+-mit Open-Source-Beiträgen von:</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">Dummy-Name wird zur Laufzeit ersetzt</text_editor>
+ 		</panel>
+ 		<panel label="Lizenzen" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK Copyright (C) 1992-2009 3Dconnexion.
+-        APR Copyright (C) 2011 The Apache Software Foundation
+-        Collada DOM Copyright 2006 Sony Computer Entertainment Inc.
+-        cURL Copyright (C) 1996-2010, Daniel Stenberg (daniel@haxx.se).
+-        DBus/dbus-glib Copyright (C) 2002, 2003  CodeFactory AB / Copyright (C) 2003, 2004 Red Hat, Inc.
+-        expat Copyright (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm und Werner Lemberg.
+-        GL Copyright (C) 1999-2004 Brian Paul.
+-        google-perftools Copyright (c) 2005, Google Inc.
+-        Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW).
+-        jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        ogg/vorbis Copyright (C) 2002, Xiphophorus.
+-        OpenSSL Copyright (C) 1998-2008 The OpenSSL Project.
+-        PCRE Copyright (c) 1997-2012 University of Cambridge.
+-        SDL Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga.
+-        SSLeay Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com).
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib Copyright (C) 1995-2012 Jean-loup Gailly und Mark Adler.
+-
+-        Second Life Viewer verwendet Havok (TM) Physics. (c)Copyright 1999-2010 Havok.com Inc. (und Lizenzgeber). Alle Rechte vorbehalten. Details siehe www.havok.com.
+-
+-        Diese Software enthält von der NVIDIA Corporation bereitgestellten Quellcode.
+-
+-        Alle Rechte vorbehalten.  Details siehe licenses.txt.
+-
+-        Audiocodierung für Voice-Chat: Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/de/strings.xml b/indra/newview/skins/default/xui/de/strings.xml
+index bd26672..39136e0 100644
+--- a/indra/newview/skins/default/xui/de/strings.xml
++++ b/indra/newview/skins/default/xui/de/strings.xml
+@@ -3,12 +3,7 @@
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+ 	</string>
+-	<string name="APP_NAME">
+-		Second Life
+-	</string>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SECOND_LIFE_GRID">
+ 		Second Life-Grid:
+ 	</string>
+@@ -30,9 +25,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		Grafikinitialisierung fehlgeschlagen. Bitte aktualisieren Sie Ihren Grafiktreiber.
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]Bit) [[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		Build-Konfiguration [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/en/floater_about.xml b/indra/newview/skins/default/xui/en/floater_about.xml
+index 4394f71..fa9d444 100644
+--- a/indra/newview/skins/default/xui/en/floater_about.xml
++++ b/indra/newview/skins/default/xui/en/floater_about.xml
+@@ -49,22 +49,24 @@
+       label="Credits" 
+       help_topic="about_credits_tab"
+       name="credits_panel">
++      <!-- Ibasho: credit Linden Lab's viewer as the base, without implying they made Ibasho -->
+       <text
+           follows="top|left|right"
+-          height="20"
++          height="96"
+           layout="topleft"
+           left="5"
+           name="linden_intro"
+           top="10"
+           width="465"
+           wrap="true">
+-Second Life is brought to you by the Lindens, 
+-with open source contributions from:
++Ibasho is a modified version of the Second Life viewer, whose source code Linden Lab publishes under the GNU LGPL 2.1. Ibasho is not made, endorsed or supported by Linden Lab. Its changes were written by Claude (Anthropic) models.
++
++The Second Life viewer is by Linden Lab, with open source contributions from:
+       </text>
+       <text_editor
+        enabled="false" 
+        follows="top|left"
+-       height="340"
++       height="264"
+        bg_readonly_color="Transparent"
+        left="5"
+        text_color="LtGray"
+@@ -102,8 +104,6 @@ Dummy Name replaced at run time
+         FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm, and Werner Lemberg.
+         GL Copyright (C) 1999-2004 Brian Paul.
+         google-perftools Copyright (c) 2005, Google Inc.
+-        Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW)
+         jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+         luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+         meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+@@ -115,13 +115,13 @@ Dummy Name replaced at run time
+         xxHash Copyright (C) 2012-2020 Yann Collet.
+         zlib Copyright (C) 1995-2012 Jean-loup Gailly and Mark Adler.
+ 
+-        Second Life Viewer uses Havok (TM) Physics. (c)Copyright 1999-2010 Havok.com Inc. (and its Licensors). All Rights Reserved. See www.havok.com for details.
+-
+         This software contains source code provided by NVIDIA Corporation.
+ 
+         All rights reserved.  See licenses.txt for details.
+ 
+-        Voice chat Audio coding: Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)
++        Second Life(TM) Viewer Artwork.  Copyright (C) 2008 Linden Research, Inc., licensed under the Creative Commons Attribution-Share Alike 3.0 License (http://creativecommons.org/licenses/by-sa/3.0/legalcode). Linden Lab's trademarks, including the Second Life brand name and the Eye-in-Hand logo, are subject to its trademark policy (http://secondlife.com/corporate/brand/trademark/). Changed for Ibasho (2026-10-22): the application icons, login logos and system-message badge are Ibasho's own artwork, under the same license; the rest of the artwork is unchanged.
++
++        Second Life is a registered trademark of Linden Research, Inc. Ibasho is not affiliated with or endorsed by Linden Research.
+       </text_editor>
+       </panel>
+     </tab_container>
+diff --git a/indra/newview/skins/default/xui/en/panel_login.xml b/indra/newview/skins/default/xui/en/panel_login.xml
+index 482cbef..0167fce 100644
+--- a/indra/newview/skins/default/xui/en/panel_login.xml
++++ b/indra/newview/skins/default/xui/en/panel_login.xml
+@@ -340,6 +340,19 @@
+                left="40"
+                top_pad="25"
+                pad_bottom="1" />
++              <!-- Ibasho: the viewer's name and version on the login screen (filled in by LLPanelLogin; click for About) -->
++              <text
++               follows="left|top"
++               font="SansSerifSmall"
++               text_color="LtGray"
++               height="15"
++               name="version_text"
++               left="40"
++               top_pad="10"
++               width="220"
++               halign="center">
++               Ibasho
++              </text>
+             </layout_panel>
+           </layout_stack>
+         </layout_panel>
+diff --git a/indra/newview/skins/default/xui/en/strings.xml b/indra/newview/skins/default/xui/en/strings.xml
+index b6947f3..19dc9ec 100644
+--- a/indra/newview/skins/default/xui/en/strings.xml
++++ b/indra/newview/skins/default/xui/en/strings.xml
+@@ -7,8 +7,9 @@
+ 
+ 	<!-- Default Args - these arguments will be replaced in all strings -->
+ 	<string name="SECOND_LIFE">Second Life</string>
+-	<string name="APP_NAME">Second Life</string>
+-	<string name="CAPITALIZED_APP_NAME">SECOND LIFE</string>
++	<!-- Ibasho: the viewer's own name (SECOND_LIFE above stays: it names the world) -->
++	<string name="APP_NAME">Ibasho</string>
++	<string name="CAPITALIZED_APP_NAME">IBASHO</string>
+ 	<string name="SECOND_LIFE_GRID">Second Life Grid</string>
+ 	<string name="SUPPORT_SITE">Second Life Support Portal</string>
+ 
+@@ -19,9 +20,11 @@
+ 	<string name="StartupRequireDriverUpdate">Graphics initialization failed. Please update your graphics driver!</string>
+ 
+ 	<!-- about dialog/support string-->
++	<!-- Ibasho: no link to Linden Lab's release notes; what Ibasho is built on, and who doesn't support it -->
+ 	<string name="AboutHeader">
+ [CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]bit)
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
++Built on the Second Life viewer source code (26.4.0, develop 81bc977) by Linden Lab, under the GNU LGPL 2.1.
++This software is not provided or supported by Linden Lab, the makers of Second Life. Ibasho itself comes without support.
+ 	</string>
+     <string name="BuildConfig">Build Configuration [BUILD_CONFIG]</string>
+ 
+diff --git a/indra/newview/skins/default/xui/es/floater_about.xml b/indra/newview/skins/default/xui/es/floater_about.xml
+index 08e0ed4..bd87e34 100644
+--- a/indra/newview/skins/default/xui/es/floater_about.xml
++++ b/indra/newview/skins/default/xui/es/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="Buscar actualizaciones" name="update_btn"/>
+ 		</panel>
+ 		<panel label="Créditos" name="credits_panel">
+-			<text name="linden_intro">Second Life ofrecido por los Lindens, 
+-con contribuciones de código abierto de:</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">Dummy Name sustituido durante la ejecución</text_editor>
+ 		</panel>
+ 		<panel label="Licencias" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK Copyright (C) 1992-2009 3Dconnexion
+-        APR Copyright (C) 2011 The Apache Software Foundation
+-        Collada DOM Copyright 2006 Sony Computer Entertainment Inc.
+-        cURL Copyright (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-        DBus/dbus-glib Copyright (C) 2002, 2003  CodeFactory AB / Copyright (C) 2003, 2004 Red Hat, Inc.
+-        expat Copyright (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm y Werner Lemberg.
+-        GL Copyright (C) 1999-2004 Brian Paul.
+-        google-perftools Copyright (c) 2005, Google Inc.
+-        Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW)
+-        jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        ogg/vorbis Copyright (C) 2002, Xiphophorus
+-        OpenSSL Copyright (C) 1998-2008 The OpenSSL Project.
+-        PCRE Copyright (c) 1997-2012 University of Cambridge
+-        SDL Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-        SSLeay Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib Copyright (C) 1995-2012 Jean-loup Gailly y Mark Adler.
+-
+-        El visor de Second Life usa Havok (TM) Physics. (c)Copyright 1999-2010 Havok.com Inc. (y sus licenciadores). Reservados todos los derechos. Vea los detalles en www.havok.com.
+-
+-        Este software contiene código fuente suministrado por NVIDIA Corporation.
+-
+-        Reservados todos los derechos.  Consulte los detalles en licenses.txt.
+-
+-        Codificación del audio del chat de voz: Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/es/strings.xml b/indra/newview/skins/default/xui/es/strings.xml
+index 1bfab01..0d44aa7 100644
+--- a/indra/newview/skins/default/xui/es/strings.xml
++++ b/indra/newview/skins/default/xui/es/strings.xml
+@@ -1,8 +1,6 @@
+ <?xml version="1.0" ?>
+ <strings>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SUPPORT_SITE">
+ 		Portal de Soporte de Second Life
+ 	</string>
+@@ -21,10 +19,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		Error de inicialización de gráficos. Actualiza tu controlador de gráficos.
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]bit) 
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		Configuración de constitución [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/fr/floater_about.xml b/indra/newview/skins/default/xui/fr/floater_about.xml
+index 7c6ae22..1d8250b 100644
+--- a/indra/newview/skins/default/xui/fr/floater_about.xml
++++ b/indra/newview/skins/default/xui/fr/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="Rechercher des mises à jour" name="update_btn"/>
+ 		</panel>
+ 		<panel label="Remerciements" name="credits_panel">
+-			<text name="linden_intro">Second Life vous est proposé par les Linden, 
+-avec les contributions Open Source de :</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">Dummy Name remplacé au moment de l&apos;exécution</text_editor>
+ 		</panel>
+ 		<panel label="Licences" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK Copyright (C) 1992-2009 3Dconnexion
+-        APR Copyright (C) 2011 The Apache Software Foundation
+-        Collada DOM Copyright 2006 Sony Computer Entertainment Inc.
+-        cURL Copyright (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-        DBus/dbus-glib Copyright (C) 2002, 2003  CodeFactory AB / Copyright (C) 2003, 2004 Red Hat, Inc.
+-        expat Copyright (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm et Werner Lemberg.
+-        GL Copyright (C) 1999-2004 Brian Paul.
+-        google-perftools Copyright (c) 2005, Google Inc.
+-        Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW)
+-        jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        ogg/vorbis Copyright (C) 2002, Xiphophorus
+-        OpenSSL Copyright (C) 1998-2008 The OpenSSL Project.
+-        PCRE Copyright (c) 1997-2012 University of Cambridge
+-        SDL Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-        SSLeay Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib Copyright (C) 1995-2012 Jean-Loup Gailly et Mark Adler.
+-
+-        Le client Second Life utilise Havok (TM) Physics. (c)Copyright 1999-2010 Havok.com Inc. (et ses concédants de licence). Tous droits réservés. Pour plus de détails, consultez le site Web www.havok.com.
+-
+-        Ce logiciel contient du code source fourni par NVIDIA Corporation.
+-
+-        Tous droits réservés.  Voir licenses.txt pour plus d&apos;informations.
+-
+-        Codage audio du chat vocal : Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/fr/strings.xml b/indra/newview/skins/default/xui/fr/strings.xml
+index 4a7a337..5ff24eb 100644
+--- a/indra/newview/skins/default/xui/fr/strings.xml
++++ b/indra/newview/skins/default/xui/fr/strings.xml
+@@ -3,12 +3,7 @@
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+ 	</string>
+-	<string name="APP_NAME">
+-		Second Life
+-	</string>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SECOND_LIFE_GRID">
+ 		Grille de Second Life
+ 	</string>
+@@ -30,10 +25,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		Échec d'initialisation des graphiques. Veuillez mettre votre pilote graphique à jour.
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]bit) 
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		Configuration de la construction [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/it/floater_about.xml b/indra/newview/skins/default/xui/it/floater_about.xml
+index 2bba6a4..c8d17d0 100644
+--- a/indra/newview/skins/default/xui/it/floater_about.xml
++++ b/indra/newview/skins/default/xui/it/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="Cerca aggiornamenti" name="update_btn"/>
+ 		</panel>
+ 		<panel label="Ringraziamenti" name="credits_panel">
+-			<text name="linden_intro">Second Life vi è offerto dai Linden, 
+-con contributi open source da:</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">Dummy Name sostituito all&apos;avvio</text_editor>
+ 		</panel>
+ 		<panel label="Licenze" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK Copyright (C) 1992-2009 3Dconnexion
+-        APR Copyright (C) 2011 The Apache Software Foundation
+-        Collada DOM Copyright 2006 Sony Computer Entertainment Inc.
+-        cURL Copyright (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-        DBus/dbus-glib Copyright (C) 2002, 2003  CodeFactory AB / Copyright (C) 2003, 2004 Red Hat, Inc.
+-        expat Copyright (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm e Werner Lemberg.
+-        GL Copyright (C) 1999-2004 Brian Paul.
+-        google-perftools Copyright (c) 2005, Google Inc.
+-        Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW)
+-        jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        ogg/vorbis Copyright (C) 2002, Xiphophorus
+-        OpenSSL Copyright (C) 1998-2008 The OpenSSL Project.
+-        PCRE Copyright (c) 1997-2012 University of Cambridge
+-        SDL Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-        SSLeay Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib Copyright (C) 1995-2012 Jean-loup Gailly e Mark Adler.
+-
+-        Il Viewer Second Life utilizza Havok (TM) Physics. (c)Copyright 1999-2010 Havok.com Inc. (e licenziatari). Tutti i diritti riservati. Per informazioni dettagliate, vedere www.havok.com.
+-
+-        Questo software contiene codice sorgente fornito da NVIDIA Corporation.
+-
+-        Tutti i diritti riservati.  Per informazioni dettagliate, vedere licenses.txt.
+-
+-        Codifica audio chat vocale: Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/it/strings.xml b/indra/newview/skins/default/xui/it/strings.xml
+index b4d6b2a..f4133e1 100644
+--- a/indra/newview/skins/default/xui/it/strings.xml
++++ b/indra/newview/skins/default/xui/it/strings.xml
+@@ -3,12 +3,7 @@
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+ 	</string>
+-	<string name="APP_NAME">
+-		Second Life
+-	</string>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SUPPORT_SITE">
+ 		Portale di supporto di Second Life
+ 	</string>
+@@ -27,10 +22,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		Inizializzazione grafica non riuscita. Aggiorna il driver della scheda grafica!
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]bit) 
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		Configurazione struttura [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/ja/floater_about.xml b/indra/newview/skins/default/xui/ja/floater_about.xml
+index dd24a04..f1fb730 100644
+--- a/indra/newview/skins/default/xui/ja/floater_about.xml
++++ b/indra/newview/skins/default/xui/ja/floater_about.xml
+@@ -6,47 +6,12 @@
+ 			<button label="更新の確認" name="update_btn"/>
+ 		</panel>
+ 		<panel label="クレジット" name="credits_panel">
+-			<text name="linden_intro">
+-				Second Life は Lindens によって開発され、以下のオープンソースの貢献があります：
+-			</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">
+ 				Dummy Nameは実行時間に置き換えられます。
+ 			</text_editor>
+ 		</panel>
+ 		<panel label="ライセンス" name="licenses_panel">
+-			<text_editor name="licenses_editor">
+-				3Dconnexion SDK Copyright (C) 1992-2009 3Dconnexion
+-APR Copyright (C) 2011 The Apache Software Foundation
+-Collada DOM Copyright 2006 Sony Computer Entertainment Inc.
+-cURL Copyright (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-DBus/dbus-glib Copyright (C) 2002, 2003  CodeFactory AB / Copyright (C) 2003, 2004 Red Hat, Inc.
+-expat Copyright (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm, and Werner Lemberg.
+-GL Copyright (C) 1999-2004 Brian Paul.
+-google-perftools Copyright (c) 2005, Google Inc.
+-Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW)
+-jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+-luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-ogg/vorbis Copyright (C) 2002, Xiphophorus
+-OpenSSL Copyright (C) 1998-2008 The OpenSSL Project.
+-PCRE Copyright (c) 1997-2012 University of Cambridge
+-SDL Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-SSLeay Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-xxHash Copyright (C) 2012-2020 Yann Collet.
+-zlib Copyright (C) 1995-2012 Jean-loup Gailly and Mark Adler.
+-
+-Second Life ビューアでは Havok (TM) Physics が使用されています。
+-(c)Copyright 1999-2010 Havok.com Inc. (and its Licensors).
+-無断複写・複製・転載を禁じます。詳細については www.havok.com をご参照ください。
+-
+-このソフトウェアには、NVIDIA Corporationによるソースコードが含まれます。
+-
+-無断複写・複製・転載を禁じます。詳細については licenses.txt をご参照ください。
+-
+-ボイスチャットのオーディオコーディング：Polycom(R) Siren14(TM) (ITU-T Rec.G.722.1 Annex C)
+-			</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/ja/strings.xml b/indra/newview/skins/default/xui/ja/strings.xml
+index a67e58a..34acf12 100644
+--- a/indra/newview/skins/default/xui/ja/strings.xml
++++ b/indra/newview/skins/default/xui/ja/strings.xml
+@@ -3,12 +3,7 @@
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+ 	</string>
+-	<string name="APP_NAME">
+-		Second Life
+-	</string>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SECOND_LIFE_GRID">
+ 		Second Lifeグリッド
+ 	</string>
+@@ -30,10 +25,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		グラフィックを初期化できませんでした。グラフィックドライバを更新してください。
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3]（[ADDRESS_SIZE]bit）
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		ビルド構成：[BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/pl/floater_about.xml b/indra/newview/skins/default/xui/pl/floater_about.xml
+index b8d7531..138f2bd 100644
+--- a/indra/newview/skins/default/xui/pl/floater_about.xml
++++ b/indra/newview/skins/default/xui/pl/floater_about.xml
+@@ -5,10 +5,7 @@
+ 			<button label="Kopiuj do schowka" name="copy_btn" />
+ 		</panel>
+ 		<panel label="Podziękowania"  name="credits_panel">
+-			<text name="linden_intro">
+-Second Life zostało dla Ciebie stworzone przez Lindenów, 
+-z wkładem open source od:
+-			</text>
++		<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 		</panel>
+ 		<panel label="Licencje" name="licenses_panel" />
+ 	</tab_container>
+diff --git a/indra/newview/skins/default/xui/pt/floater_about.xml b/indra/newview/skins/default/xui/pt/floater_about.xml
+index f7dff63..2163526 100644
+--- a/indra/newview/skins/default/xui/pt/floater_about.xml
++++ b/indra/newview/skins/default/xui/pt/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="Verificar atualizações" name="update_btn"/>
+ 		</panel>
+ 		<panel label="Créditos" name="credits_panel">
+-			<text name="linden_intro">O Second Life é trazido a você pela Lindens, 
+-com contribuições de código aberto de:</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">Dummy Name substituído durante a execução</text_editor>
+ 		</panel>
+ 		<panel label="Licenças" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK Copyright (C) 1992-2009 3Dconnexion
+-        APR Copyright (C) 2011 The Apache Software Foundation
+-        Collada DOM Copyright 2006 Sony Computer Entertainment Inc.
+-        cURL Copyright (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-        DBus/dbus-glib Copyright (C) 2002, 2003  CodeFactory AB / Copyright (C) 2003, 2004 Red Hat, Inc.
+-        expat Copyright (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm, and Werner Lemberg.
+-        GL Copyright (C) 1999-2004 Brian Paul.
+-        google-perftools Copyright (c) 2005, Google Inc.
+-        Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW)
+-        jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        ogg/vorbis Copyright (C) 2002, Xiphophorus
+-        OpenSSL Copyright (C) 1998-2008 The OpenSSL Project.
+-        PCRE Copyright (c) 1997-2012 University of Cambridge
+-        SDL Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-        SSLeay Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib Copyright (C) 1995-2012 Jean-loup Gailly and Mark Adler.
+-
+-        O Visualizador do Second Life usa Havok (TM) Physics. (c)Copyright 1999-2010 Havok.com Inc. (e seus Licenciantes). Todos os direitos reservados. Consulte www.havok.com para obter detalhes.
+-
+-        Este software contém código fonte fornecido pela NVIDIA Corporation.
+-
+-        Todos os direitos reservados.  Consulte licenses.txt para obter detalhes.
+-
+-        Codificação de áudio da conversa com voz: Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/pt/strings.xml b/indra/newview/skins/default/xui/pt/strings.xml
+index 3d03a71..8a4d2d9 100644
+--- a/indra/newview/skins/default/xui/pt/strings.xml
++++ b/indra/newview/skins/default/xui/pt/strings.xml
+@@ -1,8 +1,6 @@
+ <?xml version="1.0" ?>
+ <strings>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SUPPORT_SITE">
+ 		Portal de Supporte Second Life
+ 	</string>
+@@ -21,10 +19,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		Falha na inicialização dos gráficos. Atualize seu driver gráfico!
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]bit) 
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		Configuração do corpo [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/ru/floater_about.xml b/indra/newview/skins/default/xui/ru/floater_about.xml
+index 435d242..e3800bc 100644
+--- a/indra/newview/skins/default/xui/ru/floater_about.xml
++++ b/indra/newview/skins/default/xui/ru/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="Проверить наличие обновлений" name="update_btn"/>
+ 		</panel>
+ 		<panel label="Создатели" name="credits_panel">
+-			<text name="linden_intro">Игра Second Life разработана лабораторией Lindens, 
+-в написании открытого кода участвовали:</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">Псевдо-имя изменено при запуске</text_editor>
+ 		</panel>
+ 		<panel label="Лицензии" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK (C) 1992-2009 3Dconnexion
+-        APR (C) 2011 The Apache Software Foundation
+-        Collada DOM (C) 2006 Sony Computer Entertainment Inc.
+-        cURL (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-        DBus/dbus-glib (C) 2002, 2003  CodeFactory AB / (C) 2003, 2004 Red Hat, Inc.
+-        expat (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType (C) 1996-2002, 2006 David Turner, Robert Wilhelm и Werner Lemberg.
+-        GL (C) 1999-2004 Brian Paul.
+-        google-perftools (c) 2005, Google Inc.
+-        Havok.com(TM) (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 (C) 2001, David Taubman, Университет Нового Южного Уэльса (UNSW)
+-        jpeglib (C) 1991-1998, Thomas G. Lane.
+-        ogg/vorbis (C) 2002, Xiphophorus
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        OpenSSL (C) 1998-2008 The OpenSSL Project.
+-        PCRE (c) 1997-2012, Кембриджский университет
+-        SDL (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-        SSLeay (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib (C) 1995-2012 Jean-loup Gailly и Mark Adler.
+-
+-        В клиенте Second Life используется технология Havok (TM) Physics. (C) 1999-2010 Havok.com Inc. (и лицензиары компании). Все права защищены. Подробнее см. веб-сайт www.havok.com.
+-
+-        Это программное обеспечение содержит исходный код, предоставленный корпорацией NVIDIA.
+-
+-        Все права защищены.  Подробные сведения см. в файле licenses.txt.
+-
+-        Кодирование звука для голосового чата: Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/ru/strings.xml b/indra/newview/skins/default/xui/ru/strings.xml
+index 86973c6..3c06222 100644
+--- a/indra/newview/skins/default/xui/ru/strings.xml
++++ b/indra/newview/skins/default/xui/ru/strings.xml
+@@ -3,12 +3,7 @@
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+ 	</string>
+-	<string name="APP_NAME">
+-		Second Life
+-	</string>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SECOND_LIFE_GRID">
+ 		Сетка Second Life
+ 	</string>
+@@ -30,10 +25,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		Ошибка инициализации графики. Обновите графический драйвер!
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]bit) 
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		Конфигурация построения [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/tr/floater_about.xml b/indra/newview/skins/default/xui/tr/floater_about.xml
+index d01d0e8..1598ad5 100644
+--- a/indra/newview/skins/default/xui/tr/floater_about.xml
++++ b/indra/newview/skins/default/xui/tr/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="Güncellemeleri kontrol et" name="update_btn"/>
+ 		</panel>
+ 		<panel label="Katkıda Bulunanlar" name="credits_panel">
+-			<text name="linden_intro">Second Life, Lindens tarafından geliştirilmiştir ve 
+-açık kaynak kod katkısında bulunanlar şunlardır:</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">Geçici Ad çalıştırma sırasında değiştirilir</text_editor>
+ 		</panel>
+ 		<panel label="Lisanslar" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK Telif Hakkı (C) 1992-2009 3Dconnexion
+-        APR Telif Hakkı (C) 2011 The Apache Software Foundation
+-        Collada DOM Telif Hakkı 2006 Sony Computer Entertainment Inc.
+-        cURL Telif Hakkı (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-        DBus/dbus-glib Telif Hakkı (C) 2002, 2003  CodeFactory AB / Telif Hakkı (C) 2003, 2004 Red Hat, Inc.
+-        expat Telif Hakkı (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType Telif Hakkı (C) 1996-2002, 2006 David Turner, Robert Wilhelm ve Werner Lemberg.
+-        GL Telif Hakkı (C) 1999-2004 Brian Paul.
+-        google-perftools Telif Hakkı (c) 2005, Google Inc.
+-        Havok.com(TM) Telif Hakkı (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Telif Hakkı (C) 2001, David Taubman, The University of New South Wales (UNSW)
+-        jpeglib Telif Hakkı (C) 1991-1998, Thomas G. Lane.
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        ogg/vorbis Telif Hakkı (C) 2002, Xiphophorus
+-        OpenSSL Telif Hakkı (C) 1998-2008 The OpenSSL Project.
+-        PCRE Telif Hakkı (c) 1997-2012 University of Cambridge
+-        SDL Telif Hakkı (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-        SSLeay Telif Hakkı (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib Telif Hakkı (C) 1995-2012 Jean-loup Gailly ve Mark Adler.
+-
+-        Second Life Görüntüleyicisi Havok (TM) Fizik motorunu kullanmaktadır. (c)Telif Hakkı 1999-2010 Havok.com Inc. (ve Lisans Verenleri). Tüm Hakları Saklıdır. Ayrıntılı bilgi için bkz. www.havok.com
+-
+-        Bu yazılımda NVIDIA Corporation tarafından sağlanan kaynak kod yer almaktadır.
+-
+-        Tüm hakları saklıdır.  Ayrıntılı bilgi için bkz. licenses.txt
+-
+-        Sesli sohbet için Ses kodlaması: Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/tr/strings.xml b/indra/newview/skins/default/xui/tr/strings.xml
+index 3eaa6a6..9ab3573 100644
+--- a/indra/newview/skins/default/xui/tr/strings.xml
++++ b/indra/newview/skins/default/xui/tr/strings.xml
+@@ -3,12 +3,7 @@
+ 	<string name="SECOND_LIFE">
+ 		Second Life
+ 	</string>
+-	<string name="APP_NAME">
+-		Second Life
+-	</string>
+-	<string name="CAPITALIZED_APP_NAME">
+-		SECOND LIFE
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SECOND_LIFE_GRID">
+ 		Second Life Ağı
+ 	</string>
+@@ -30,10 +25,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		Grafik başlatma başarılamadı. Lütfen grafik sürücünüzü güncelleştirin!
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]bit) 
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		Yapı Konfigürasyonu [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/skins/default/xui/zh/floater_about.xml b/indra/newview/skins/default/xui/zh/floater_about.xml
+index 4c23bec..c026b70 100644
+--- a/indra/newview/skins/default/xui/zh/floater_about.xml
++++ b/indra/newview/skins/default/xui/zh/floater_about.xml
+@@ -6,40 +6,10 @@
+ 			<button label="查詢是否有更新版" name="update_btn"/>
+ 		</panel>
+ 		<panel label="貸記" name="credits_panel">
+-			<text name="linden_intro">Second Life 由以下的 Linden 家族帶給你： 
+-這些人士做了開放源碼的貢獻：</text>
++			<!-- Ibasho: credits intro and licenses come from en/floater_about.xml -->
+ 			<text_editor name="contrib_names">執行時期被取代的假名稱</text_editor>
+ 		</panel>
+ 		<panel label="許可" name="licenses_panel">
+-			<text_editor name="licenses_editor">3Dconnexion SDK Copyright (C) 1992-2009 3Dconnexion
+-        APR Copyright (C) 2011 The Apache Software Foundation
+-        Collada DOM Copyright 2006 Sony Computer Entertainment Inc.
+-        cURL Copyright (C) 1996-2010, Daniel Stenberg, (daniel@haxx.se)
+-        DBus/dbus-glib Copyright (C) 2002, 2003  CodeFactory AB / Copyright (C) 2003, 2004 Red Hat, Inc.
+-        expat Copyright (C) 1998, 1999, 2000 Thai Open Source Software Center Ltd.
+-        FreeType Copyright (C) 1996-2002, 2006 David Turner, Robert Wilhelm, and Werner Lemberg.
+-        GL Copyright (C) 1999-2004 Brian Paul.
+-        google-perftools Copyright (c) 2005, Google Inc.
+-        Havok.com(TM) Copyright (C) 1999-2001, Telekinesys Research Limited.
+-        jpeg2000 Copyright (C) 2001, David Taubman, The University of New South Wales (UNSW)
+-        jpeglib Copyright (C) 1991-1998, Thomas G. Lane.
+-        luau Copyright (c) 1994–2019 Lua.org, PUC-Rio / Copyright (c) 2019-2024 Roblox Corporation
+-        meshoptimizer Copyright (c) 2016-2021 Arseny Kapoulkine
+-        ogg/vorbis Copyright (C) 2002, Xiphophorus
+-        OpenSSL Copyright (C) 1998-2008 The OpenSSL Project.
+-        PCRE Copyright (c) 1997-2012 University of Cambridge
+-        SDL Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002 Sam Lantinga
+-        SSLeay Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
+-        xxHash Copyright (C) 2012-2020 Yann Collet.
+-        zlib Copyright (C) 1995-2012 Jean-loup Gailly and Mark Adler.
+-
+-        第二人生 Viewer 採用 Havok (TM) 物理引擎。 (c)Copyright 1999-2010 Havok.com Inc.（及其放照人）。 保留一切權利。 詳情見 www.havok.com。
+-
+-        本軟體含有 NVIDIA Corporation 提供的源程式碼。
+-
+-        保留一切權利。  詳情見 licenses.txt。
+-
+-        語音聊天音頻技術：Polycom(R) Siren14(TM) (ITU-T Rec. G.722.1 Annex C)</text_editor>
+ 		</panel>
+ 	</tab_container>
+ </floater>
+diff --git a/indra/newview/skins/default/xui/zh/strings.xml b/indra/newview/skins/default/xui/zh/strings.xml
+index 1a094ea..1c8d717 100644
+--- a/indra/newview/skins/default/xui/zh/strings.xml
++++ b/indra/newview/skins/default/xui/zh/strings.xml
+@@ -3,12 +3,7 @@
+ 	<string name="SECOND_LIFE">
+ 		第二人生
+ 	</string>
+-	<string name="APP_NAME">
+-		第二人生
+-	</string>
+-	<string name="CAPITALIZED_APP_NAME">
+-		第二人生
+-	</string>
++	<!-- Ibasho: APP_NAME, CAPITALIZED_APP_NAME and AboutHeader come from en/strings.xml -->
+ 	<string name="SECOND_LIFE_GRID">
+ 		第二人生網格
+ 	</string>
+@@ -30,10 +25,6 @@
+ 	<string name="StartupRequireDriverUpdate">
+ 		顯像初始化失敗。 請更新你的顯像卡驅動程式！
+ 	</string>
+-	<string name="AboutHeader">
+-		[CHANNEL] [VIEWER_VERSION_0].[VIEWER_VERSION_1].[VIEWER_VERSION_2].[VIEWER_VERSION_3] ([ADDRESS_SIZE]位元)
+-[[VIEWER_RELEASE_NOTES_URL] [ReleaseNotes]]
+-	</string>
+ 	<string name="BuildConfig">
+ 		建製設置 [BUILD_CONFIG]
+ 	</string>
+diff --git a/indra/newview/viewer_manifest.py b/indra/newview/viewer_manifest.py
+index 326b3ad..20cf78f 100755
+--- a/indra/newview/viewer_manifest.py
++++ b/indra/newview/viewer_manifest.py
+@@ -245,15 +245,8 @@ class ViewerManifest(LLManifest):
+         return suffix
+ 
+     def installer_base_name(self):
+-        global CHANNEL_VENDOR_BASE
+-        # a standard map of strings for replacing in the templates
+-        substitution_strings = {
+-            'channel_vendor_base' : '_'.join(CHANNEL_VENDOR_BASE.split()),
+-            'channel_variant_underscores':self.channel_variant_app_suffix(),
+-            'version_underscores' : '_'.join(self.args['version']),
+-            'arch':self.args['arch']
+-            }
+-        return "%(channel_vendor_base)s%(channel_variant_underscores)s_%(version_underscores)s_%(arch)s" % substitution_strings
++        # Ibasho: Ibasho_<version>_<arch>, without Linden Lab's vendor name
++        return "%s_%s_%s" % (self.app_name_oneword(), '_'.join(self.args['version']), self.args['arch'])
+ 
+     def installer_base_name_mac(self):
+         global CHANNEL_VENDOR_BASE
+@@ -266,16 +259,12 @@ class ViewerManifest(LLManifest):
+         return "%(channel_vendor_base)s%(channel_variant_underscores)s_%(version_underscores)s_universal" % substitution_strings
+ 
+     def app_name(self):
+-        global CHANNEL_VENDOR_BASE
+-        channel_type=self.channel_type()
+-        if channel_type == 'release':
+-            app_suffix='Viewer'
+-        else:
+-            app_suffix=self.channel_variant()
+-        return CHANNEL_VENDOR_BASE + ' ' + app_suffix
++        # Ibasho: the app is named after its channel ("Ibasho"), never "Second Life ..."
++        return self.channel()
+ 
+     def exec_name(self):
+-        return "SecondLifeViewer"
++        # Ibasho: IbashoViewer.exe (not Ibasho.exe, which a Python "ibasho" command could also be called)
++        return self.app_name_oneword() + "Viewer"
+ 
+     def app_name_oneword(self):
+         return ''.join(self.app_name().split())

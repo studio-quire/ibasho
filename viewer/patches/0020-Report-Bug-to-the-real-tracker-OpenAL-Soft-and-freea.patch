@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 01:33:44 +0000
+Subject: [PATCH 20/25] Report Bug to the real tracker; OpenAL Soft and
+ freealut in licenses.txt
+
+ReportBugURL points at https://github.com/Shoalstone/ibasho/issues (it was a
+placeholder). licenses.txt gains OpenAL Soft and freealut: LGPL, unmodified,
+with where their complete source is.
+---
+ indra/newview/app_settings/settings.xml |  4 ++--
+ indra/newview/licenses-win32.txt        | 20 ++++++++++++++++++--
+ 2 files changed, 20 insertions(+), 4 deletions(-)
+
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index 1d169a9..0e20aa8 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -10286,13 +10286,13 @@
+ 		<key>ReportBugURL</key>
+ 		<map>
+ 			<key>Comment</key>
+-			<string>Ibasho: URL used for filing bugs from the viewer (Help &gt; Report Bug): Ibasho's issue tracker, not Linden Lab's. PLACEHOLDER until the project is published: put the real repository here.</string>
++			<string>Ibasho: URL used for filing bugs from the viewer (Help &gt; Report Bug): Ibasho's issue tracker, not Linden Lab's.</string>
+ 			<key>Persist</key>
+ 			<integer>1</integer>
+ 			<key>Type</key>
+ 			<string>String</string>
+ 			<key>Value</key>
+-			<string>https://github.com/OWNER/ibasho/issues</string>
++			<string>https://github.com/Shoalstone/ibasho/issues</string>
+ 		</map>
+ 	<key>RevokePermsOnStopAnimation</key>
+     <map>
+diff --git a/indra/newview/licenses-win32.txt b/indra/newview/licenses-win32.txt
+index 8e81e47..99ce931 100644
+--- a/indra/newview/licenses-win32.txt
++++ b/indra/newview/licenses-win32.txt
+@@ -1,7 +1,8 @@
+ Licenses of the third-party software in this build of Ibasho (see also About > Licenses).
+ Modified for Ibasho (2026-10-23): entries for software Ibasho doesn't include removed (the Logitech
+-LCD SDK, FSI FontShop's Meta fonts, glh, Kakadu's JPEG2000, xmlrpc-epi, google-perftools) and
+-OpenJPEG's license added (Ibasho decodes JPEG2000 with OpenJPEG).
++LCD SDK, FSI FontShop's Meta fonts, glh, Kakadu's JPEG2000, xmlrpc-epi, google-perftools);
++OpenJPEG's license added (Ibasho decodes JPEG2000 with OpenJPEG); OpenAL Soft and freealut, with
++where their source is.
+ 
+ ===========
+ APR License
+@@ -190,6 +191,21 @@ OpenJPEG License
+  */
+ 
+ 
++===============================
++OpenAL Soft and freealut (LGPL)
++===============================
++
++OpenAL32.dll (OpenAL Soft 1.24.2) and alut.dll (freealut), which play the viewer's
++sound, are free software under the GNU Library General Public License, version 2
++or (at your option) any later version. They are unmodified builds by Linden Lab.
++Their complete source, with the scripts that build them, is at
++https://github.com/secondlife/3p-openal-soft, tag v1.24.2-r1 (OpenAL Soft itself:
++https://github.com/kcat/openal-soft). The license's full text is in
++licenses\openal-soft.txt beside this file in an Ibasho release, and at
++https://www.gnu.org/licenses/old-licenses/lgpl-2.0.html. You may replace these
++two DLLs with your own builds of the same libraries.
++
++
+ ==================
+ ogg/vorbis License
+ ==================

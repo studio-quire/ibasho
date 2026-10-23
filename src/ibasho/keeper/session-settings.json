@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ibasho)",
+      "Bash(ibasho *)"
+    ],
+    "deny": [
+      "Bash(ibasho keeper *)",
+      "Bash(ibasho --config *)",
+      "Bash(ibasho login *)",
+      "Bash(ibasho login)",
+      "Bash(ibasho init *)",
+      "Bash(ibasho init)",
+      "Bash(ibasho selfcheck --reset *)",
+      "Bash(ibasho selfcheck --reset)",
+      "Bash(ibasho uninstall *)",
+      "Bash(ibasho uninstall)",
+      "Bash(ibasho viewer *)",
+      "Bash(ibasho viewer)",
+      "Bash(ibasho tool setup *)",
+      "Bash(ibasho tool setup)",
+      "Bash(ibasho tool install *)",
+      "Bash(ibasho tool install)",
+      "Bash(ibasho hear setup *)",
+      "Bash(ibasho hear setup)",
+      "Bash(ibasho hear run --pid *)",
+      "Bash(ibasho hear run --file *)"
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibasho"
+version = "0.1.0"
+description = "Tools for an AI model to live its own life in a virtual world through a LEAP-enabled viewer"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "aiohttp>=3.9",
+    "llsd>=1.2",
+    "Pillow>=10",
+    "psutil>=5.9",
+    "tzdata>=2024.1",
+]
+classifiers = [
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+# av<19: PyAV 19 broke faster-whisper 1.2.1's decode_audio (Ibasho decodes itself, but anything calling it breaks)
+hearing = ["faster-whisper>=1.1", "av<19", "numpy>=1.26"]
+# `ibasho mcp`; written against the SDK's 2.x API (MCPServer), which 1.x doesn't have
+mcp = ["mcp>=2.0,<3"]
+test = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+ibasho = "ibasho.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ibasho = ["lsl/*.lsl", "keeper/*.json"]
+
+[tool.setuptools.data-files]
+# The life folder template the keeper copies for a new agent (outside the package so it's easy to find).
+"share/ibasho/life-template" = ["life-template/README.md"]
+"share/ibasho/life-template/journal" = ["life-template/journal/.keep"]
+"share/ibasho/life-template/people" = ["life-template/people/.keep"]
+"share/ibasho/life-template/places" = ["life-template/places/.keep"]
+# added to the life folder by `ibasho tool setup`, not when it's made
+"share/ibasho/life-template/tools" = ["life-template/tools/README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

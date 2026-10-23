@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Thu, 22 Oct 2026 22:04:18 +0000
+Subject: [PATCH 10/25] IbashoBuild: deselect API-created objects on the region
+
+create, duplicate and rez ask for their objects create-selected, so the
+viewer can match each new object to its request. The region then holds the
+object selected by us, but outside the edit tool the viewer never selects
+it locally and so never sends ObjectDeselect. On Second Life a selected
+physical object is frozen in place (a physical vehicle ignores its motors).
+
+When a requested object arrives and the viewer hasn't selected it itself,
+send ObjectDeselect for its prims. With the edit tool open the selection
+manager has selected it and deselects it as usual.
+---
+ indra/newview/ibashoobjects.cpp | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/indra/newview/ibashoobjects.cpp b/indra/newview/ibashoobjects.cpp
+index 5261ddc..348a750 100644
+--- a/indra/newview/ibashoobjects.cpp
++++ b/indra/newview/ibashoobjects.cpp
+@@ -1068,10 +1068,33 @@ std::shared_ptr<PendingCreate> newPending(const LLSD& modify, const LLVector3& w
+     return pending;
+ }
+ 
++// We ask for new objects create-selected (so they can be told apart), which makes the region hold them
++// selected by us. Outside the edit tool the viewer never selects them locally, so it never sends the
++// deselect, and on the Second Life grid a selected physical object stays frozen. Tell the region we're
++// done with it.
++void deselectOnRegion(LLViewerObject* o)
++{
++    LLViewerRegion* region = o->getRegion();
++    if (!region || o->isSelected())
++        return; // selected locally (edit tool open): the selection manager deselects it in time
++    LLMessageSystem* msg = gMessageSystem;
++    msg->newMessageFast(_PREHASH_ObjectDeselect);
++    packAgent(msg);
++    msg->nextBlockFast(_PREHASH_ObjectData);
++    msg->addU32Fast(_PREHASH_ObjectLocalID, o->getLocalID());
++    for (const auto& child : o->getChildren())
++    {
++        msg->nextBlockFast(_PREHASH_ObjectData);
++        msg->addU32Fast(_PREHASH_ObjectLocalID, child->getLocalID());
++    }
++    msg->sendReliable(region->getHost());
++}
++
+ void claim(const std::shared_ptr<PendingCreate>& pending, LLViewerObject* o)
+ {
+     pending->created = o->getID();
+     sClaimed.insert(o->getID());
++    deselectOnRegion(o);
+     LLSD ev = llsd::map("id", o->getID(), "local_id", (LLSD::Integer)o->getLocalID(),
+                         "pos", ll_sd_from_vector3(o->getPositionRegion()), "requested", true);
+     LLSD mod = pending->modify;

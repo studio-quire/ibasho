@@ -1,0 +1,351 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Fri, 23 Oct 2026 07:55:49 +0000
+Subject: [PATCH 21/25] Built-in browser: no files, no pages on this machine or
+ its network
+
+The web and media floaters, prim and parcel media and parcel music all
+load through CEF. A program driving the viewer can type into an open
+browser window, so a check where LEAP calls arrive isn't enough: the
+viewer itself now refuses file: URLs (also behind view-source:) and
+pages on this machine or its network: loopback, private, link-local and
+shared (100.64/10) IPv4 addresses in any of the forms a browser reads
+(127.1, 2130706433, 0x7f.0.0.1, percent-encoded), localhost names, and
+any IPv6 literal. The grid's own login page and login service are
+allowed, wherever the grid runs.
+
+Checked in LLViewerMediaImpl::navigateInternal before the MIME type
+probe requests anything, in LLPluginClassMedia::loadURI before any
+plugin gets a URL, and when a page's address changes (a link, form or
+redirect inside it got there; that request has gone out by then): the
+page is replaced with about:blank. A refusal shows a notice and posts
+IbashoEvents {event: "refused", what: "browser"}, at most once a minute
+for the same reason.
+
+Not covered: host names that resolve to local addresses, and requests a
+page makes for its parts (images, scripts, frames).
+---
+ doc/IBASHO-CHANGES.txt                |   6 +
+ indra/llplugin/llpluginclassmedia.cpp |  10 ++
+ indra/newview/ibashohooks.h           |   5 +
+ indra/newview/ibasholimits.cpp        | 174 +++++++++++++++++++++++++-
+ indra/newview/llviewermedia.cpp       |   6 +
+ 5 files changed, 199 insertions(+), 2 deletions(-)
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+index cb5c01f..8678773 100644
+--- a/doc/IBASHO-CHANGES.txt
++++ b/doc/IBASHO-CHANGES.txt
+@@ -12,6 +12,9 @@ doc/LICENSE-logos.txt
+ indra/llfilesystem/lldir.cpp
+     Modified for Ibasho (2026-10-22): the cache folder is named after the app (Ibasho) instead of
+     SecondLife.
++indra/llplugin/llpluginclassmedia.cpp
++    Modified for Ibasho (2026-10-23): a hook that lets newview refuse a URL before a media plugin
++    loads it, and leave a page that a link or redirect took to such a URL.
+ indra/llui/llfloater.cpp
+     Modified for Ibasho (2026-10-10, 2026-10-22): a hook that lets newview hold a floater hidden
+     (IbashoAgent streamUI).
+@@ -113,6 +116,9 @@ indra/newview/lluilistener.cpp
+ indra/newview/llversioninfo.cpp
+     Modified for Ibasho (2026-10-23): the Ibasho channel counts as a release channel (normal menu
+     bar colour).
++indra/newview/llviewermedia.cpp
++    Modified for Ibasho (2026-10-23): the built-in browser refuses files and pages on this machine
++    or its network before the MIME type probe asks for them.
+ indra/newview/llviewermessage.cpp
+     Modified for Ibasho (2026-10-10, 2026-10-22): hook: balance replies are posted to
+     IbashoEvents; payments within the spending caps.
+diff --git a/indra/llplugin/llpluginclassmedia.cpp b/indra/llplugin/llpluginclassmedia.cpp
+index 540bd77..035d196 100644
+--- a/indra/llplugin/llpluginclassmedia.cpp
++++ b/indra/llplugin/llpluginclassmedia.cpp
+@@ -24,6 +24,9 @@
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
+  * @endcond
++ *
++ * Modified for Ibasho (2026-10-23): a hook that lets newview refuse a URL before a media plugin loads
++ * it, and leave a page a link or redirect inside it took to such a URL. Changes are marked "Ibasho".
+  */
+ 
+ #include "linden_common.h"
+@@ -40,6 +43,10 @@ extern LLControlGroup gSavedSettings;
+ extern bool gHiDPISupport;
+ #endif
+ 
++// Ibasho: newview's check for URLs the built-in browser mustn't open (files, this machine or its network).
++// A plain pointer, so it's null before any dynamic initialisation and newview can set it from one.
++bool (*gIbashoAllowURL)(const std::string& url) = nullptr; // Ibasho
++
+ static int LOW_PRIORITY_TEXTURE_SIZE_DEFAULT = 256;
+ static const U32 MIN_DEBUG_PORT = 1024;
+ static const U32 MAX_DEBUG_PORT = 65535;
+@@ -777,6 +784,8 @@ void LLPluginClassMedia::setCookie(std::string uri, std::string name, std::strin
+ 
+ void LLPluginClassMedia::loadURI(const std::string &uri)
+ {
++    if (gIbashoAllowURL && !gIbashoAllowURL(uri)) return; // Ibasho
++
+     LLPluginMessage message(LLPLUGIN_MESSAGE_CLASS_MEDIA, "load_uri");
+ 
+     message.setValue("uri", uri);
+@@ -1365,6 +1374,7 @@ void LLPluginClassMedia::receivePluginMessage(const LLPluginMessage &message)
+         else if(message_name == "location_changed")
+         {
+             mLocation = message.getValue("uri");
++            if (gIbashoAllowURL && !gIbashoAllowURL(mLocation)) loadURI("about:blank"); // Ibasho: a link or redirect got there
+             mediaEvent(LLPluginClassMediaOwner::MEDIA_EVENT_LOCATION_CHANGED);
+         }
+         else if(message_name == "click_href")
+diff --git a/indra/newview/ibashohooks.h b/indra/newview/ibashohooks.h
+index e0d45f3..aead2b7 100644
+--- a/indra/newview/ibashohooks.h
++++ b/indra/newview/ibashohooks.h
+@@ -67,6 +67,11 @@ namespace ibasho
+     bool allowSpend(S32 amount, const std::string& what);
+     bool allowLandBuy();      // IbashoAllowLandBuy
+     bool allowCurrencyBuy();  // IbashoAllowCurrencyBuy (buying L$ with real money)
++    // The built-in browser (web and media floaters, prim and parcel media, parcel music): files, and pages on
++    // this machine or its network (loopback, private, link-local and shared addresses, localhost names, any
++    // IPv6 literal) are refused, except the grid's own login pages. Checked before a navigation is sent and
++    // again when a link or redirect inside a page arrives somewhere (that request has gone out by then).
++    bool allowBrowserURL(const std::string& url);
+ }
+ 
+ #endif
+diff --git a/indra/newview/ibasholimits.cpp b/indra/newview/ibasholimits.cpp
+index 35f49ea..8ebb1dd 100644
+--- a/indra/newview/ibasholimits.cpp
++++ b/indra/newview/ibasholimits.cpp
+@@ -2,8 +2,9 @@
+  * @file   ibasholimits.cpp
+  * @brief  Hard limits that hold however the viewer is driven (LEAP APIs, or UI clicks and keys sent
+  *         over LEAP): a daily cap on outgoing chat lines and IMs, the spending caps on the UI's own
+- *         payment and purchase paths, and no land or L$ purchases unless the person allows them.
+- *         Written by Claude Opus 5.5, 2026-10-22.
++ *         payment and purchase paths, no land or L$ purchases unless the person allows them, and a
++ *         built-in browser that doesn't open files or pages on this machine or its network.
++ *         Written by Claude Opus 5.5, 2026-10-22 and 2026-10-23.
+  *
+  * $LicenseInfo:firstyear=2026&license=viewerlgpl$
+  * Ibasho viewer source code: an addition to the Second Life Viewer Source Code
+@@ -34,8 +35,11 @@
+ #include "llsdutil.h"
+ #include "llstring.h"
+ #include "lltimer.h"
++#include "lluri.h"
+ #include "llviewercontrol.h"
++#include "llviewernetwork.h"
+ 
++#include <cctype>
+ #include <fstream>
+ 
+ namespace
+@@ -84,6 +88,147 @@ void saveCount()
+     out << sMessages.date << ' ' << sMessages.count << '\n';
+ }
+ 
++// The built-in browser's URL check reads a URL as a browser would: tabs and newlines anywhere are
++// ignored, and so are spaces and control characters at either end; case doesn't matter.
++std::string browserForm(const std::string& url)
++{
++    std::string s;
++    for (char c : url)
++    {
++        if (c != '\t' && c != '\n' && c != '\r') s += c;
++    }
++    size_t b = 0, e = s.size();
++    while (b < e && (unsigned char)s[b] <= ' ') ++b;
++    while (e > b && (unsigned char)s[e - 1] <= ' ') --e;
++    s = s.substr(b, e - b);
++    LLStringUtil::toLower(s);
++    while (s.compare(0, 12, "view-source:") == 0) s.erase(0, 12);
++    return s;
++}
++
++// The scheme, or "" if there's none ("127.0.0.1:8080/" has none; "localhost:8080" looks like one).
++std::string schemeOf(const std::string& s)
++{
++    size_t colon = s.find(':');
++    if (colon == std::string::npos || colon == 0 || !std::isalpha((unsigned char)s[0])) return "";
++    for (size_t i = 0; i < colon; ++i)
++    {
++        if (!std::isalnum((unsigned char)s[i]) && s[i] != '+' && s[i] != '-' && s[i] != '.') return "";
++    }
++    return s.substr(0, colon);
++}
++
++// host[:port] after the slashes (either kind, or none) that follow the scheme, without user info,
++// percent-decoded.
++std::string authorityOf(const std::string& rest)
++{
++    size_t b = rest.find_first_not_of("/\\");
++    if (b == std::string::npos) return "";
++    std::string a = rest.substr(b, rest.find_first_of("/\\?#", b) - b);
++    size_t at = a.rfind('@');
++    if (at != std::string::npos) a.erase(0, at + 1);
++    a = LLURI::unescape(a);
++    LLStringUtil::toLower(a);
++    return a;
++}
++
++std::string hostOf(const std::string& authority)
++{
++    std::string h;
++    size_t close = authority.find(']');
++    if (!authority.empty() && authority[0] == '[')
++        h = close == std::string::npos ? authority : authority.substr(0, close + 1);
++    else
++        h = authority.substr(0, authority.find(':'));
++    while (!h.empty() && h.back() == '.') h.pop_back();
++    return h;
++}
++
++// An IPv4 host as browsers read one: one to four parts, each decimal, octal (leading 0) or hex (0x), the
++// last filling the remaining bytes, so 127.1, 0x7f.0.0.1 and 2130706433 are all 127.0.0.1.
++bool ipv4Of(const std::string& host, U32& addr)
++{
++    std::vector<U64> parts;
++    size_t start = 0;
++    while (true)
++    {
++        size_t dot = host.find('.', start);
++        std::string part = host.substr(start, dot == std::string::npos ? std::string::npos : dot - start);
++        if (part.empty() || parts.size() == 4) return false;
++        U64 base = 10, v = 0;
++        size_t i = 0;
++        if (part.size() > 1 && part[0] == '0' && part[1] == 'x') { base = 16; i = 2; }
++        else if (part.size() > 1 && part[0] == '0') { base = 8; i = 1; }
++        for (; i < part.size(); ++i)
++        {
++            char c = part[i];
++            U64 d = (c >= '0' && c <= '9') ? U64(c - '0') : (c >= 'a' && c <= 'f') ? U64(c - 'a' + 10) : 99;
++            if (d >= base) return false;
++            v = v * base + d;
++            if (v > 0xffffffffULL) return false;
++        }
++        parts.push_back(v);
++        if (dot == std::string::npos) break;
++        start = dot + 1;
++    }
++    U64 a = 0;
++    for (size_t k = 0; k + 1 < parts.size(); ++k)
++    {
++        if (parts[k] > 255) return false;
++        a = (a << 8) | parts[k];
++    }
++    size_t rest = 5 - parts.size();  // bytes left for the last part
++    if (parts.back() >> (8 * rest)) return false;
++    addr = (U32)((a << (8 * rest)) | parts.back());
++    return true;
++}
++
++bool isLocalHost(const std::string& host)
++{
++    if (host.empty()) return false;
++    if (host[0] == '[') return true;  // any IPv6 literal (::1, fc00::/7, fe80::/10, mapped IPv4...)
++    if (host == "localhost" || (host.size() > 10 && host.compare(host.size() - 10, 10, ".localhost") == 0))
++        return true;
++    U32 a;
++    if (!ipv4Of(host, a)) return false;
++    U32 a0 = a >> 24, a1 = (a >> 16) & 0xff;
++    return a0 == 0 || a0 == 10 || a0 == 127 || a0 >= 224                // this network, private, loopback, multicast
++        || (a0 == 100 && (a1 & 0xc0) == 64)                             // shared (carrier NAT, VPN meshes)
++        || (a0 == 169 && a1 == 254) || (a0 == 172 && (a1 & 0xf0) == 16) || (a0 == 192 && a1 == 168);
++}
++
++// scheme://host[:port], or "" without a scheme.
++std::string originOf(const std::string& url)
++{
++    std::string s = browserForm(url), scheme = schemeOf(s);
++    return scheme.empty() ? "" : scheme + "://" + authorityOf(s.substr(scheme.size() + 1));
++}
++
++// "file" for a file, the host for a page on this machine or its network, else "".
++std::string localTarget(const std::string& url)
++{
++    std::string s = browserForm(url), scheme = schemeOf(s);
++    if (scheme == "file" || scheme == "filesystem") return "file";
++    bool web = scheme == "http" || scheme == "https" || scheme == "ws" || scheme == "wss" || scheme == "ftp";
++    // other schemes are also read as a bare host, as a browser may ("localhost:8080")
++    std::string host = hostOf(authorityOf(web ? s.substr(scheme.size() + 1) : s));
++    return isLocalHost(host) ? host : "";
++}
++
++// The grid's own login page and login service: the person chose the grid, wherever it runs.
++bool isGridPage(const std::string& url)
++{
++    std::string origin = originOf(url);
++    std::vector<std::string> pages;
++    LLGridManager::getInstance()->getLoginURIs(pages);
++    pages.push_back(LLGridManager::getInstance()->getLoginPage());
++    for (const std::string& page : pages)
++    {
++        if (!origin.empty() && origin == originOf(page)) return true;
++    }
++    return false;
++}
++
+ } // namespace
+ 
+ namespace ibasho
+@@ -148,4 +293,29 @@ bool allowCurrencyBuy()
+     return false;
+ }
+ 
++bool allowBrowserURL(const std::string& url)
++{
++    std::string target = localTarget(url);
++    if (target.empty() || (target != "file" && isGridPage(url)))
++        return true;
++    std::string reason = target == "file"
++        ? "Ibasho: the built-in browser doesn't open files on this computer."
++        : "Ibasho: the built-in browser doesn't open pages on this computer or its network (" + target + ").";
++    // Media retries a navigation now and then, and a page can redirect in a loop: once a minute is enough.
++    static std::string sLast;
++    static F64 sLastAt = 0.0;
++    F64 now = LLTimer::getTotalSeconds().value();
++    if (reason != sLast || now - sLastAt > 60.0)
++    {
++        sLast = reason;
++        sLastAt = now;
++        refuse("browser", reason);
++    }
++    return false;
++}
++
+ } // namespace ibasho
++
++// LLPluginClassMedia (llplugin) asks this before any media plugin loads a URL, and when a page arrives at one.
++extern bool (*gIbashoAllowURL)(const std::string& url); // llpluginclassmedia.cpp
++static const bool sIbashoURLHook = (gIbashoAllowURL = ibasho::allowBrowserURL, true);
+diff --git a/indra/newview/llviewermedia.cpp b/indra/newview/llviewermedia.cpp
+index 2cc3674..ba653b6 100644
+--- a/indra/newview/llviewermedia.cpp
++++ b/indra/newview/llviewermedia.cpp
+@@ -22,11 +22,15 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-10-23): the built-in browser refuses files and pages on this machine or its
++ * network before the MIME type probe asks for them. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+ 
+ #include "llviewermedia.h"
++#include "ibashohooks.h" // Ibasho
+ 
+ #include "llagent.h"
+ #include "llagentcamera.h"
+@@ -2633,6 +2637,8 @@ void LLViewerMediaImpl::navigateInternal(bool should_log)
+         }
+     }
+ 
++    if (!ibasho::allowBrowserURL(mMediaURL)) return; // Ibasho: not even the MIME type probe
++
+     if(mNavigateSuspended)
+     {
+         if (should_log || !mNavigateSuspendedDeferred)

@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 02:02:18 +0000
+Subject: [PATCH 01/25] UI.call: reply with an error for unknown functions
+ instead of crashing
+
+LL_ERRS on a typo took the whole viewer down. Now the call replies {error}
+(and {} on success) when the request asks for a reply.
+---
+ indra/newview/lluilistener.cpp | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/indra/newview/lluilistener.cpp b/indra/newview/lluilistener.cpp
+index d95560b..3762676 100644
+--- a/indra/newview/lluilistener.cpp
++++ b/indra/newview/lluilistener.cpp
+@@ -38,6 +38,8 @@
+ #include "lluictrl.h"
+ #include "llerror.h"
+ #include "llcombobox.h"
++#include "stringize.h" // Ibasho: error replies below
++#include <iomanip>     // Ibasho: std::quoted
+ 
+ 
+ LLUIListener::LLUIListener():
+@@ -66,15 +68,14 @@ LLUIListener::LLUIListener():
+ 
+ void LLUIListener::call(const LLSD& event) const
+ {
++    // Ibasho: reply if asked (empty, or with the error) instead of being fire-and-forget.
++    Response response(LLSD(), event);
+     LLUICtrl::commit_callback_t* func =
+         LLUICtrl::CommitCallbackRegistry::getValue(event["function"]);
+     if (! func)
+     {
+-        // This API is intended for use by a script. It's a fire-and-forget
+-        // API: we provide no reply. Therefore, a typo in the script will
+-        // provide no feedback whatsoever to that script. To rub the coder's
+-        // nose in such an error, crump rather than quietly ignoring it.
+-        LL_ERRS("LLUIListener") << "function '" << event["function"] << "' not found" << LL_ENDL;
++        // Ibasho: report the typo instead of crashing the viewer.
++        response.error(stringize("function ", std::quoted(event["function"].asString()), " not found"));
+     }
+     else
+     {
