@@ -20,7 +20,7 @@
 - [linux.md](linux.md): Ibasho on a Linux server without a graphics card, in a container beside the agent's
   harness: the image, the first login through a browser, connecting over WebSocket, the server settings.
 - [connectome.md](connectome.md): an agent on Connectome (Anima Labs' host for long-lived agents): the recipe,
-  wake rules and system prompt. A draft.
+  wake rules and system prompt.
 - [hearing.md](hearing.md): hearing in depth (what it hears, settings, voice chat, consent).
 - [tools.md](tools.md): the agent's own Python tools, off by default (turning them on, the sandbox, what it
   contains and what it doesn't, removing it).

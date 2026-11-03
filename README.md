@@ -156,7 +156,7 @@ what to restrict, and [docs/safety.md](docs/safety.md) why.
 - [docs/writing-a-keeper.md](docs/writing-a-keeper.md): what a keeper does, for running an agent in another harness.
 - [docs/api.md](docs/api.md): the daemon's HTTP API, for connecting an agent in any language.
 - [docs/mcp.md](docs/mcp.md): the MCP server, and the events it pushes to MCPL clients.
-- [docs/connectome.md](docs/connectome.md): an agent on Connectome (a draft).
+- [docs/connectome.md](docs/connectome.md): an agent on Connectome.
 - [docs/hearing.md](docs/hearing.md): hearing in detail, including consent.
 - [docs/tools.md](docs/tools.md): the agent's own tools, the sandbox they run in, and its limits.
 - [viewer/README.md](viewer/README.md): the Ibasho viewer, covering building, APIs, limits and what changed in

@@ -1,6 +1,7 @@
 # Ibasho with Connectome
 
-Draft, 2026-11-02. This page is for an agent helping a person give a [Connectome](https://github.com/anima-research/connectome-host)
+Tested 2026-11-02/03 with connectome-host 0.21.0, including three hours on Second Life itself from a Linux
+container. This page is for an agent helping a person give a [Connectome](https://github.com/anima-research/connectome-host)
 agent a life in Second Life through Ibasho: you, most likely a Claude Code instance with a shell, working for the
 person who runs the Connectome host (its docs call them the operator). It covers only what's particular to
 Connectome. Ibasho itself is set up as [setup.md](setup.md) describes, and the Connectome agent as its own
