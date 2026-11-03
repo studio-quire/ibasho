@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Sun, 11 Oct 2026 10:42:41 +0000
-Subject: [PATCH 07/25] Spectator mode: the real mouse and keyboard don't reach
+Subject: [PATCH 07/35] Spectator mode: the real mouse and keyboard don't reach
  the viewer
 
 IbashoSpectator (on at every launch, not saved; IbashoAgent spectator {on}):

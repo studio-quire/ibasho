@@ -36,6 +36,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import tempfile
 import time
 import urllib.parse
@@ -170,9 +171,10 @@ ALLOWED: dict[str, dict[str, str | None]] = {
         "names", "upload", "uploadMesh", "wearables", "createWearable", "editWearable", "rebake", "move", "stop",
         "probeGround", "messages")),
         # a name search like the viewer's avatar picker, reading a profile, reading one of my notecards, and a
-        # region looked up on the map (viewers that have them)
+        # region looked up on the map (viewers that have them); my own profile and display name, whatever the
+        # agent chooses to put there
         "findAvatars": "_find_avatars", "profile": "_profile", "readNotecard": "_read_notecard",
-        "findRegion": "_find_region"},
+        "findRegion": "_find_region", "setProfile": "_set_profile", "setDisplayName": "_set_display_name"},
     "IbashoIM": dict.fromkeys(("send", "sessions", "history", "markRead", "leave", "conference")),
     "IbashoObjects": dict.fromkeys(("nearby", "get", "find", "request", "buy", "select", "deselect", "selection")),
     "IbashoBuild": dict.fromkeys(("create", "modify", "duplicate", "rez", "link", "unlink", "take", "delete",
@@ -623,6 +625,20 @@ class Policy:
             return refuse(f"profile id {data.get('id')!r}: an avatar's id (a UUID)", rule="arguments")
         return _timeout_check(op, data)
 
+    def _set_profile(self, pump: str, op: str, data: dict, notes: dict) -> Verdict | None:
+        # Types only: what the profile says is the agent's own call.
+        if "about" in data and not isinstance(data["about"], str):
+            return refuse("setProfile about: text", rule="arguments")
+        if "image_id" in data and not (isinstance(data["image_id"], str) and UUID.match(data["image_id"])):
+            return refuse(f"setProfile image_id {data['image_id']!r}: a texture's asset id (a UUID)",
+                          rule="arguments")
+        return _timeout_check(op, data)
+
+    def _set_display_name(self, pump: str, op: str, data: dict, notes: dict) -> Verdict | None:
+        if not isinstance(data.get("name"), str):
+            return refuse("setDisplayName name: text (\"\" for the username)", rule="arguments")
+        return _timeout_check(op, data)
+
     def _read_notecard(self, pump: str, op: str, data: dict, notes: dict) -> Verdict | None:
         if not isinstance(data.get("item_id"), str) or not UUID.match(data["item_id"]):
             return refuse(f"readNotecard item_id {data.get('item_id')!r}: an inventory item's id (a UUID)",
@@ -1051,9 +1067,15 @@ class StageError(Exception):
 
 
 def opened_path(f) -> str:
-    """Where an open file really is: Windows' own answer for the handle, after every link and junction."""
+    """Where an open file really is: the system's own answer for the open file (Windows' for the handle, Linux's
+    /proc link for the descriptor), after every link and junction."""
     if os.name != "nt":
-        return os.path.realpath(f.name)
+        try:
+            return os.readlink(f"/proc/self/fd/{f.fileno()}")
+        except OSError:
+            if sys.platform.startswith("linux"):
+                raise
+            return os.path.realpath(f.name)   # no /proc (macOS): the name, resolved after opening
     import ctypes
     import msvcrt
     from ctypes import wintypes

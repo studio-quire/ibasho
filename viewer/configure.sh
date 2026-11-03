@@ -4,7 +4,7 @@
 #   bash configure.sh [SOURCE_TREE]      (default: $IBASHO_VIEWER_WORK/viewer-src, see setup.sh)
 #
 # Needed after setup, after CMake files change, and before every release build: the version's build
-# number (0.1.0.N) is fixed here, N = number of commits on top of BASE.
+# number (MAJOR.MINOR.PATCH.N) is fixed here, N = number of commits on top of BASE.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

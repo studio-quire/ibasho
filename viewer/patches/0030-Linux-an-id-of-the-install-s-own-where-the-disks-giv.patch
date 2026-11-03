@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 11:45:22 +0000
+Subject: [PATCH 30/35] Linux: an id of the install's own where the disks give
+ none
+
+The serial number Linden Lab's login and stats see (id0) is the MD5 of the
+longest name in /dev/disk/by-uuid. A container has no such folder, so every
+container install sent the MD5 of nothing, the same id, tying all their
+accounts together. Where there's no disk id, the viewer now uses one of the
+install's own: a random UUID made the first time and kept in the viewer's
+settings folder (install_id), so it lasts as long as the saved login does.
+---
+ doc/IBASHO-CHANGES.txt             |  4 +++
+ indra/newview/llappviewerlinux.cpp | 48 ++++++++++++++++++++++++++++++
+ 2 files changed, 52 insertions(+)
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+index 9548dbe..d59ca6c 100644
+--- a/doc/IBASHO-CHANGES.txt
++++ b/doc/IBASHO-CHANGES.txt
+@@ -87,6 +87,10 @@ indra/newview/llappviewer.cpp
+     frame rate cap (IbashoMaxFPS, IbashoIdleFPS).
+ indra/newview/llappviewer.h
+     Modified for Ibasho (2026-10-22): the window class is Ibasho's own.
++indra/newview/llappviewerlinux.cpp
++    Modified for Ibasho (2026-11-03): where the disks give no id (a container), the serial number is
++    made from an id of the install's own, kept in the viewer's settings folder, instead of from
++    nothing.
+ indra/newview/llappviewerwin32.cpp
+     Modified for Ibasho (2026-10-22): the single-instance mutex is Ibasho's own.
+ indra/newview/llavatarpropertiesprocessor.cpp
+diff --git a/indra/newview/llappviewerlinux.cpp b/indra/newview/llappviewerlinux.cpp
+index 2fd0eeb..0f48d8d 100644
+--- a/indra/newview/llappviewerlinux.cpp
++++ b/indra/newview/llappviewerlinux.cpp
+@@ -22,6 +22,10 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-11-03): where the disks give no id (a container has no /dev/disk/by-uuid), the
++ * serial number is made from an id of this install's own instead of from nothing, which every such install
++ * would share. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+@@ -30,7 +34,9 @@
+ 
+ #include "llcommandlineparser.h"
+ 
++#include "lldir.h" // Ibasho
+ #include "lldiriterator.h"
++#include "llfile.h" // Ibasho
+ #include "llurldispatcher.h"        // SLURL from other app instance
+ #include "llviewernetwork.h"
+ #include "llviewercontrol.h"
+@@ -712,6 +718,40 @@ bool LLAppViewerLinux::initParseCommandLine(LLCommandLineParser& clp)
+     return true;
+ }
+ 
++// Ibasho: this install's own id (see generateSerialNumber).
++static std::string ibashoInstallId()
++{
++    std::string path = gDirUtilp->add(gDirUtilp->getOSUserAppDir(), "install_id");
++    std::string id;
++    {
++        llifstream in(path.c_str());
++        if (in.is_open())
++        {
++            std::getline(in, id);
++        }
++    }
++    LLStringUtil::trim(id);
++    if (LLUUID::validate(id) && LLUUID(id).notNull())
++    {
++        return id;
++    }
++    id = LLUUID::generateNewID().asString();
++    llofstream out(path.c_str(), std::ios::trunc);
++    if (out.is_open())
++    {
++        out << id << std::endl;
++    }
++    if (!out.is_open() || !out.good())
++    {
++        LL_WARNS("AppInit") << "Couldn't keep this install's id in " << path << ": a new one next time" << LL_ENDL;
++    }
++    else
++    {
++        LL_INFOS("AppInit") << "No disk ids here: made this install's own id (" << path << ")" << LL_ENDL;
++    }
++    return id;
++}
++
+ std::string LLAppViewerLinux::generateSerialNumber()
+ {
+     char serial_md5[MD5HEX_STR_SIZE];
+@@ -734,6 +774,14 @@ std::string LLAppViewerLinux::generateSerialNumber()
+         }
+     }
+ 
++    // Ibasho: no disk ids (a container) would make this the hash of nothing, the same for every such install,
++    // tying their accounts together where Linden Lab sees it. One of the install's own instead, made at
++    // random the first time and kept beside the viewer's settings (so it lasts as long as the saved login).
++    if (best.empty())
++    {
++        best = ibashoInstallId();
++    }
++
+     // we don't return the actual serial number, just a hash of it.
+     LLMD5 md5( reinterpret_cast<const unsigned char*>(best.c_str()) );
+     md5.hex_digest(serial_md5);

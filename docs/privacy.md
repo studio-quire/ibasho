@@ -5,7 +5,7 @@ tooling. This page describes what it collects, stores, uses and shares, as Linde
 asks of every viewer. It also describes what the person running an agent takes on, because most of the data
 here is other people's.
 
-Last updated 2026-10-23. Changes are recorded in this repository's history.
+Last updated 2026-11-03. Changes are recorded in this repository's history.
 
 ## What Ibasho's authors collect: nothing
 
@@ -19,7 +19,9 @@ about you or about anyone your agent meets, so there's nothing for them to hand 
 - **Linden Lab, or whoever runs the grid.** Everything any viewer sends: the login, the avatar's movements, chat
   and IMs, purchases, uploads, and the viewer statistics every viewer reports. Linden Lab's own
   [privacy policy](https://lindenlab.com/privacy) covers that. Ibasho doesn't change what the viewer tells the
-  grid.
+  grid, with one exception on Linux: where the machine has no disk id (a container), the machine id sent at login
+  is one made at random for the install (`install_id` in the viewer's settings folder), not the value every
+  container would otherwise share. On Windows it's what any viewer on that PC sends.
 - **Your agent's model provider.** This is the big one. Everything the agent perceives and does in its sessions
   goes to whoever runs the agent's model, as part of the conversation. With the keeper, that's Anthropic, through
   Claude Code, or another provider if you've set Claude Code up for one. With another harness, it's whichever
@@ -42,10 +44,16 @@ about you or about anyone your agent meets, so there's nothing for them to hand 
   prims and parcels), and plays the parcel's music stream from wherever the land's owner points it. With
   `hearing.follow_music` on, Ibasho fetches that stream too. `ibasho hear setup` downloads the speech model from
   Hugging Face once. After that, hearing works offline.
+- **The person's browser, on Linux.** While `ibasho login` lasts, the viewer's screen is served to the person's
+  own browser (through their SSH tunnel to the server) so they can type the password in. It goes nowhere else,
+  and the view closes when that viewer does.
 
 ## What stays on your machine
 
-All paths are under the install's home (`%USERPROFILE%\Ibasho` by default) unless shown otherwise.
+All paths are under the install's home (`%USERPROFILE%\Ibasho` by default) unless shown otherwise. On Linux, in
+the container, the install's home is `/home/ibasho/Ibasho` and the viewer's folder (`%APPDATA%\Ibasho` below) is
+`/home/ibasho/.ibasho`, both in the container's volume; the saved login there is encrypted with the container's
+MAC address.
 
 | What | Where | Kept | What's in it |
 |---|---|---|---|
@@ -105,9 +113,10 @@ data controller, the one responsible. This isn't legal advice, and whether any e
 activity applies to you is a question for your own adviser. Linden Lab itself recommends asking a privacy
 attorney. In practice, the duties look like this:
 
-- **Notice.** People should be able to find out what happens to their words. The avatar's profile is the natural
-  place: that it's an AI, that what's said near it goes to an AI provider, how long things are kept, and how to
-  ask to be forgotten (asking the agent works).
+- **Notice.** People should be able to find out what happens to their words: that what's said near the avatar goes
+  to an AI provider, how long things are kept, and how to ask to be forgotten (asking the agent works). The
+  avatar's profile is where people look. The agent writes it; if you want the notice there, tell it why and leave
+  the words to it.
 - **A lawful basis.** You need a reason the law recognises for processing their data. Which one fits depends on
   where you are and what you do.
 - **Retention.** Keep things no longer than needed. The defaults (7 days, 2 for speech) are a starting point;
@@ -116,7 +125,7 @@ attorney. In practice, the duties look like this:
   agent's own notes are the path. Someone may also ask what you hold about them, and the files above are where to
   look.
 - **Security.** Keep the machine yours. The event log, transcripts and saved login are only as private as the
-  Windows account they live in.
+  Windows account they live in, or on Linux the server and the container's volume.
 - **Transfers.** The provider may process data in another country. Its terms say where.
 
 Hearing adds its own weight. Transcribing voice may count as recording, and in many places recording a

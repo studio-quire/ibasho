@@ -1,0 +1,131 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 11:49:53 +0000
+Subject: [PATCH 33/35] Servers: memory given back after a busy place
+ (IbashoTrimMemory)
+
+On Second Life a viewer that had been in a crowded region stayed at that
+size after leaving (5.7 GB at a quiet corner, from 2.3 GB before): glibc
+keeps freed memory for reuse instead of handing it back. On Linux, every
+IbashoTrimMemory seconds (0, never, by default; Ibasho's tools set it on
+servers) malloc_trim gives the free pages back, between frames.
+---
+ doc/IBASHO-CHANGES.txt                  | 13 +++++-----
+ indra/newview/app_settings/settings.xml | 13 +++++++++-
+ indra/newview/ibashoserver.cpp          | 33 ++++++++++++++++++++++---
+ 3 files changed, 49 insertions(+), 10 deletions(-)
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+index d59ca6c..23cecfe 100644
+--- a/doc/IBASHO-CHANGES.txt
++++ b/doc/IBASHO-CHANGES.txt
+@@ -37,12 +37,13 @@ indra/newview/CMakeLists.txt
+ indra/newview/VIEWER_VERSION.txt
+     Modified for Ibasho (2026-10-22): Ibasho's own version number (a data file read by CMake).
+ indra/newview/app_settings/settings.xml
+-    Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02): settings for
+-    the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost,
+-    IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy,
+-    IbashoAllowCurrencyBuy) and for running on servers (IbashoMaxFPS, IbashoIdleFPS,
+-    IbashoIdleAfter, IbashoNoWebPlugin, IbashoTextureBudget); Report Bug goes to Ibasho's issue
+-    tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes).
++    Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02, 2026-11-03):
++    settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend,
++    IbashoMaxUploadCost, IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay,
++    IbashoAllowLandBuy, IbashoAllowCurrencyBuy) and for running on servers (IbashoMaxFPS,
++    IbashoIdleFPS, IbashoIdleAfter, IbashoNoWebPlugin, IbashoTextureBudget, IbashoTrimMemory);
++    Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up
++    (UpdaterShowReleaseNotes).
+ indra/newview/app_settings/settings_per_account.xml
+     Modified for Ibasho (2026-10-22): chat and IM transcripts off by default (LogNearbyChat,
+     KeepConversationLogTranscripts).
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index dee5a89..79fe903 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" ?>
+-<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy; for servers: IbashoMaxFPS, IbashoIdleFPS, IbashoIdleAfter, IbashoNoWebPlugin, IbashoTextureBudget); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes). Changes are marked "Ibasho". -->
++<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02, 2026-11-03): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy; for servers: IbashoMaxFPS, IbashoIdleFPS, IbashoIdleAfter, IbashoNoWebPlugin, IbashoTextureBudget, IbashoTrimMemory); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes). Changes are marked "Ibasho". -->
+ <llsd xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:noNamespaceSchemaLocation="llsd.xsd">
+ <map>
+@@ -12070,6 +12070,17 @@
+       <key>Value</key>
+       <integer>0</integer>
+     </map>
++    <key>IbashoTrimMemory</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho (Linux): every this many seconds, give memory the viewer has freed back to the system (malloc_trim), so it shrinks again after a busy place; 0 for never. Not saved.</string>
++      <key>Persist</key>
++      <integer>0</integer>
++      <key>Type</key>
++      <string>F32</string>
++      <key>Value</key>
++      <real>0</real>
++    </map>
+     <key>TextureCameraBoost</key>
+     <map>
+       <key>Comment</key>
+diff --git a/indra/newview/ibashoserver.cpp b/indra/newview/ibashoserver.cpp
+index d2a7287..2edeaff 100644
+--- a/indra/newview/ibashoserver.cpp
++++ b/indra/newview/ibashoserver.cpp
+@@ -1,9 +1,10 @@
+ /**
+  * @file   ibashoserver.cpp
+  * @brief  Running on a server without a GPU (Mesa's llvmpipe under a virtual display): a frame rate cap
+- *         with a lower one while no LEAP plugin is asking anything, no web browser plugin, and a
+- *         texture budget that holds. Each is a setting, off by default; Ibasho's tools set them.
+- *         Written by Claude Opus 5.5, 2026-11-02.
++ *         with a lower one while no LEAP plugin is asking anything, no web browser plugin, a
++ *         texture budget that holds, and memory given back to the system now and then. Each is a
++ *         setting, off by default; Ibasho's tools set them.
++ *         Written by Claude Opus 5.5, 2026-11-02 and 2026-11-03.
+  *
+  * $LicenseInfo:firstyear=2026&license=viewerlgpl$
+  * Ibasho viewer source code: an addition to the Second Life Viewer Source Code
+@@ -34,9 +35,34 @@
+ #include "lltimer.h"
+ #include "llviewercontrol.h"
+ 
++#if LL_LINUX
++#include <malloc.h>
++#endif
++
+ namespace ibasho
+ {
+ 
++namespace
++{
++// glibc keeps memory the viewer has freed (textures, meshes, objects left behind on leaving a busy region) for
++// reuse rather than handing it back, so a viewer that once saw a crowd stays that size. Every IbashoTrimMemory
++// seconds, malloc_trim gives the free pages back.
++void trimMemory()
++{
++#if LL_LINUX
++    static LLCachedControl<F32> every(gSavedSettings, "IbashoTrimMemory", 0.f);
++    static F64 last = 0;
++    F64 now = LLTimer::getTotalSeconds();
++    if (every <= 0.f || now - last < every)
++    {
++        return;
++    }
++    last = now;
++    malloc_trim(0);
++#endif
++}
++}
++
+ void limitFrameRate()
+ {
+     // Software rendering takes every core it's given, so a frame rate cap is what leaves the machine's CPU to
+@@ -67,6 +93,7 @@ void limitFrameRate()
+         }
+     }
+     last_frame_end = LLTimer::getTotalSeconds();
++    trimMemory(); // once a frame is a good moment: nothing is being drawn
+ }
+ 
+ bool allowWebPlugin(const std::string& plugin_basename)

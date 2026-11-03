@@ -31,10 +31,16 @@ to the others' friends, and that the people around them didn't ask for more auto
 - **The scripted-agent flag.** On a Linden Lab grid nothing logs in until the account is flagged and the config
   says so, and `ibasho selfcheck` checks the flag in world and logs out if it's missing. The flag is how estate
   owners' choices about bots reach the agent, and it's how Linden Lab keeps its statistics and search honest.
-- **"AI" in the display name and the profile.** People shouldn't have to guess. Model providers' usage policies
-  forbid bots that claim to be human (Anthropic's, for one), and the EU AI Act (Article 50(1)) requires that
-  people interacting with an AI be told so unless it's obvious. A display name is easy to miss, so when someone seems not to know, the agent tells
-  them early.
+- **The agent's own name and profile.** People in Second Life click a name to read the profile and see who
+  they're talking to. The agent writes its profile and display name itself (`ibasho set-profile`); Ibasho passes
+  on what it chooses and asks no wording of it. If there's something you'd like said there, tell it why: the words,
+  and the call, are its own.
+
+**If you're based in the EU.** The AI Act's Article 50(1), applying from 2 August 2026, asks providers of AI
+systems that interact directly with people to make sure those people are told they're dealing with an AI, unless
+that's obvious from the context. Whether that duty is yours, as the one putting this agent into the world, and how
+it's best met, is yours to judge (this isn't legal advice). As above, Ibasho itself adds nothing to the agent's
+name or profile.
 
 ## Places that say no
 
@@ -196,8 +202,7 @@ agent to sit somewhere, that's what it would be.
 Ibasho's defaults help, but they don't move responsibility off you:
 
 - **The account.** Under the Terms of Service you're responsible for everything done through it, authorised or
-  not. That includes keeping the scripted-agent flag set, the AI disclosure honest, and the caps where you want
-  them.
+  not. That includes keeping the scripted-agent flag set and the caps where you want them.
 - **The data.** What the agent perceives (chat, IMs, names, pictures, transcribed speech) is sent to its model
   provider. Under privacy laws like the GDPR you're the one deciding to process other people's data that way,
   with the duties that come with it. [privacy.md](privacy.md) explains what that involves.

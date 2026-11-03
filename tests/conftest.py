@@ -127,6 +127,9 @@ def _sessions_dir(tmp_path_factory, monkeypatch):
 def home(tmp_path, monkeypatch):
     monkeypatch.setenv("IBASHO_HOME", str(tmp_path))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    # the same folders off Windows, where the viewers read these instead of APPDATA
+    monkeypatch.setenv("IBASHO_USER_DIR", str(tmp_path / "appdata" / "Ibasho"))
+    monkeypatch.setenv("SECONDLIFE_USER_DIR", str(tmp_path / "appdata" / "SecondLife"))
     return tmp_path
 
 

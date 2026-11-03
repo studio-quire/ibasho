@@ -58,6 +58,11 @@ def register(sub):
     p.add_argument("words", nargs="*")
     p.add_argument("--folder", default="object", help="object, notecard, texture, lstndfnd, inbox, root_inv...")
     p.set_defaults(fn=inv)
+    p = sub.add_parser("outfit", help="my outfits (My Outfits); with a name or a folder id, wear that one")
+    p.add_argument("name", nargs="?", default="", help="an outfit's name (or part of it), or any folder's id")
+    p.add_argument("--add", action="store_true", help="add it to what I'm wearing instead of replacing it")
+    p.add_argument("--library", action="store_true", help="NAME is a folder in the Library, by its exact name")
+    p.set_defaults(fn=outfit)
     p = sub.add_parser("obj", help="an object's contents, from the script editor's listing")
     p.add_argument("id")
     p.set_defaults(fn=obj)
@@ -201,6 +206,35 @@ def inv(ctx: Ctx, a):
         print(f"{name}{f' x{len(its)}' if len(its) > 1 else ''}  {its[-1]['id']}")
     if not groups:
         print("(nothing)")
+
+
+def outfit(ctx: Ctx, a):
+    api = ctx.api
+    outfits = api.cmd("LLAppearance", "getOutfitsList").get("outfits") or {}
+    if not a.name:
+        for oid, name in sorted(outfits.items(), key=lambda kv: str(kv[1]).lower()):
+            print(f"{name}  {oid}")
+        if not outfits:
+            print("(no outfits in My Outfits)")
+        return
+    if a.library:
+        args: dict = {"folder_name": a.name}
+    elif is_uuid(a.name):
+        args = {"folder_id": a.name}
+    else:
+        want = a.name.lower()
+        hits = [i for i, n in outfits.items() if str(n).lower() == want] or                [i for i, n in outfits.items() if want in str(n).lower()]
+        if len(hits) != 1:
+            names = ", ".join(repr(outfits[i]) for i in hits[:8])
+            raise Fail(f"{len(hits)} outfits match {a.name!r}" + (f": {names}" if hits else " (`ibasho outfit` lists them)"))
+        args = {"folder_id": hits[0]}
+    try:
+        api.op("LLAppearance", "wearOutfit", dict(args, append=a.add), timeout=30)
+    except ApiError as e:
+        if a.library:
+            raise Fail(f"no folder named exactly {a.name!r} in the Library ({e})") from None
+        raise
+    print(("adding it" if a.add else "wearing it") + " (others see the change once it has baked, within a minute or so)")
 
 
 def rez(ctx: Ctx, a):

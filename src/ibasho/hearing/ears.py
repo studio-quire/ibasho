@@ -3,13 +3,14 @@
 Ears, each feeding one shared Whisper model (faster-whisper on the CPU, int8, one transcription at a time,
 speech before music):
 
-- the viewer's own sound (proccap's process loopback of the viewer's process tree, nothing else on the
-  machine): utterances cut by an energy gate, transcribed into `heard` events (`via: viewer`); claps and knocks
-  in the same sound into `heard_rhythm` events;
+- the viewer's own sound, nothing else on the machine (proccap's process loopback of the viewer's process tree
+  on Windows; on Linux the sound-server sink only the viewer plays on): utterances cut by an energy gate,
+  transcribed into `heard` events (`via: viewer`); claps and knocks in the same sound into `heard_rhythm` events;
 - the parcel's music stream, if `follow_music`: overlapping windows into `heard_stream` events, which wake only on
   the avatar's name (lyrics come through too);
 - voice chat, only if `voice_device` names a spare output device: the viewer's voice output is pinned there and
-  that whole device recorded (`heard`, `via: voice`). Second Life voice chat isn't in the viewer's process sound.
+  that whole device recorded (`heard`, `via: voice`). Second Life voice chat isn't in the viewer's process sound
+  on Windows; on Linux it's kept out of the viewer's sink by playing on its own.
 
 Events go to the daemon's event log (POST /event) and nowhere else: this process logs what it's doing, never
 what it heard. Each event says whether it should wake `ibasho watch` (`wake`).
@@ -202,15 +203,25 @@ class Status:
 
 
 class Trail:
-    """My recent positions (my own footsteps splash and creak like claps)."""
+    """My recent positions (my own footsteps splash and creak like claps). `lazy`: only while there's sound worth
+    checking (`wake()`), since on a server every request keeps the viewer from its idle frame rate."""
 
-    def __init__(self, api: Api):
-        self.api = api
+    LAZY_FOR = 8.0   # seconds of polling after the last wake
+
+    def __init__(self, api: Api, lazy: bool = False):
+        self.api, self.lazy = api, lazy
+        self.woken = 0.0
         self.points: collections.deque = collections.deque(maxlen=60)
         threading.Thread(target=self._run, daemon=True, name="trail").start()
 
+    def wake(self):
+        self.woken = time.monotonic()
+
     def _run(self):
         while True:
+            if self.lazy and time.monotonic() - self.woken > self.LAZY_FOR:
+                time.sleep(0.1)
+                continue
             try:
                 x, y, _ = self.api.cmd("LLAgent", "getPosition", timeout=5)["region"]
                 self.points.append((time.time(), x, y))
@@ -232,12 +243,12 @@ def rhythm_text(d: dict) -> str:
 
 class Hearing:
     def __init__(self, cfg: Config, h: settings_mod.Hearing, api: Api | None, sink: Sink, status: Status,
-                 transcribe, proccap: Path | None = None):
+                 transcribe, tool: Path | None = None):
         self.cfg, self.h, self.api, self.sink, self.status = cfg, h, api, sink, status
-        self.proccap = proccap
+        self.tool = tool
         self.names = Names(cfg, h.heard_as, api)
         self.worker = Worker(transcribe)
-        self.trail = Trail(api) if api and h.claps else None
+        self.trail = Trail(api, lazy=cfg.server.enabled) if api and h.claps else None
         self.voice_id: str | None = None
 
     # ---- speech ----
@@ -272,6 +283,8 @@ class Hearing:
         for x in frames:
             if claps:
                 claps.feed(x, seg.busy)
+                if self.trail and (seg.busy or claps.active):
+                    self.trail.wake()
             u = seg.feed(x)
             if u is not None:
                 self.utterance(u, "viewer", claps)
@@ -339,24 +352,24 @@ class Hearing:
     def voice_ear(self):
         while True:
             try:
-                dev = find_device(list_devices(self.proccap), self.h.voice_device)
+                dev = find_device(list_devices(self.tool), self.h.voice_device)
             except CaptureError as e:
                 self.status.ear("voice", f"off: {e}")
                 time.sleep(60)
                 continue
             if dev.is_default:
                 self.voice_id = None
-                self.status.ear("voice", f"refused: {dev.name!r} is a Windows default output "
+                self.status.ear("voice", f"refused: {dev.name!r} is a default output "
                                          f"({', '.join(dev.roles)}), so it would record everything this machine "
                                          "plays; choose a spare device")
                 time.sleep(30)
                 continue
-            self.voice_id = dev.id
+            self.voice_id = dev.viewer_id
             if not self.pin_voice():
                 self.status.ear("voice", "waiting for the viewer to point its voice output at the device")
                 time.sleep(15)
                 continue
-            cap = device_capture(self.proccap, dev.id)
+            cap = device_capture(self.tool, dev.id)
             self.status.ear("voice", f"on: {dev.name}")
             seg = Segmenter(self.h.gate_db)
             for x in cap.frames():
@@ -365,7 +378,7 @@ class Hearing:
                     self.utterance(u, "voice")
             code = cap.wait()
             self.voice_id = None
-            self.status.ear("voice", "refused: the device became a Windows default output" if code == REFUSED
+            self.status.ear("voice", "refused: the device became a default output" if code == REFUSED
                             else f"stopped ({cap.message or code}); retrying")
             time.sleep(30)
 
@@ -390,12 +403,19 @@ class Hearing:
             if not muted and self.api:
                 try:
                     self.api.cmd("LLViewerControl", "set", {"group": "Global", "key": "AudioLevelMusic", "value": 0.0})
+                    if self.cfg.server.enabled:
+                        # On Linux the stream plays through the GStreamer plugin, which can miss a volume of 0 set
+                        # before it starts (heard at full volume on Second Life, 2026-11-03); on a server nobody
+                        # listens anyway, so the viewer doesn't fetch it at all
+                        self.api.cmd("LLViewerControl", "set", {"group": "Global", "key": "AudioStreamingMusic",
+                                                                "value": False})
                     muted = True
                 except ApiError:
                     pass
             if self.voice_id:
                 self.pin_voice()
-            time.sleep(60)
+            # on a server each check costs a few seconds off the idle frame rate; `ibasho up` set the device already
+            time.sleep(600 if self.cfg.server.enabled else 60)
 
     # ---- running ----
 
@@ -468,12 +488,11 @@ def run(cfg: Config, *, model: str | None = None, pid: int | None = None, to_std
     setup_logging(cfg, foreground)
     below_normal()
     api = None if file else Api(cfg)
-    proccap = None
+    tool = None
     if not file:
-        proccap = settings_mod.proccap_path(cfg, h)
-        if proccap is None:
-            raise HearError("proccap.exe not found: build it with audio\\build.bat (or put a release's copy in "
-                            f"{cfg.home / 'bin'}), or set hearing.proccap")
+        tool = settings_mod.capture_tool(cfg, h)
+        if tool is None:
+            raise HearError(settings_mod.missing_tool())
         pid = pid or viewer_pid(cfg, api)
         if not pid:
             raise HearError("no viewer running to listen to (`ibasho up` first)")
@@ -485,12 +504,12 @@ def run(cfg: Config, *, model: str | None = None, pid: int | None = None, to_std
         transcribe = Transcriber(h.model, settings_mod.threads(h), h.language, settings_mod.models_dir(cfg))
     except ImportError:
         raise HearError('hearing needs its extra packages: pip install ".[hearing]" in the Ibasho folder') from None
-    ears = Hearing(cfg, h, api, Sink(api, to_stdout), status, transcribe, proccap)
+    ears = Hearing(cfg, h, api, Sink(api, to_stdout), status, transcribe, tool)
     if file:
         ears.viewer_ear(file_frames(file), drain=True)
         return 0
     try:
-        cap = process_capture(proccap, pid)
+        cap = process_capture(tool, pid)
     except CaptureError as e:
         raise HearError(str(e)) from None
     status.ear("viewer", f"on: the viewer's sound (pid {pid})")

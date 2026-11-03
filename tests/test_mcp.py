@@ -48,6 +48,7 @@ def test_argv():
     assert argv("prim-mod", "a", "b", pos=[1.0, 2.5, -3.0], fullbright=0, set={"hollow": 0.5}, name=None,
                 force=False) == ["prim-mod", "--pos=1,2.5,-3", "--fullbright=0", '--set={"hollow": 0.5}', "--", "a", "b"]
     assert argv("look", noshot=True) == ["look", "--noshot"]
+    assert argv("im-log", "s1", n=5) == ["im-log", "-n5", "--", "s1"]
 
 
 async def test_the_persons_commands_arent_tools(home):
@@ -249,3 +250,30 @@ def test_missing_extra_message(monkeypatch, home):
     from ibasho.cli.common import Fail
     with pytest.raises(Fail, match=r"ibasho\[mcp\]"):
         mcp_server.serve(None, type("A", (), {"config": None})())
+
+
+async def test_set_profile_and_outfit_are_tools(world):
+    w = world
+    w.viewer.extra_ops = {"IbashoAgent": ["setProfile", "setDisplayName"]}
+    w.connect()
+    w.viewer.handlers[("IbashoAgent", "setProfile")] = lambda d: {}
+    w.viewer.handlers[("IbashoAgent", "setDisplayName")] = lambda d: {"display_name": d["name"]}
+    r = await call(w, "set_profile", about="-- starts with dashes\nand goes on", display_name="")
+    assert not r.is_error and "profile saved" in text_of(r), text_of(r)
+    assert w.viewer.sent("IbashoAgent", "setProfile")[-1]["about"] == "-- starts with dashes\nand goes on"
+    assert w.viewer.sent("IbashoAgent", "setDisplayName")[-1]["name"] == ""
+    r = await call(w, "set_profile")
+    assert r.is_error
+    outfits = {"0f0f0000-0000-4000-8000-000000000001": "Harbour clothes",
+               "0f0f0000-0000-4000-8000-000000000002": "Rain gear"}
+    w.viewer.handlers[("LLAppearance", "getOutfitsList")] = lambda d: {"outfits": outfits}
+    w.viewer.handlers[("LLAppearance", "wearOutfit")] = lambda d: {}
+    r = await call(w, "outfit")
+    assert not r.is_error and "Harbour clothes" in text_of(r) and "Rain gear" in text_of(r)
+    r = await call(w, "outfit", name="rain")
+    assert not r.is_error and text_of(r).startswith("wearing it")
+    sent = w.viewer.sent("LLAppearance", "wearOutfit")[-1]
+    assert sent["folder_id"].endswith("0002") and sent["append"] is False
+    r = await call(w, "outfit", name="Casual", library=True, add=True)
+    sent = w.viewer.sent("LLAppearance", "wearOutfit")[-1]
+    assert sent["folder_name"] == "Casual" and sent["append"] is True

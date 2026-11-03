@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Thu, 22 Oct 2026 22:08:38 +0000
-Subject: [PATCH 13/25] Branding: Ibasho's name, window, About and login screen
+Subject: [PATCH 13/35] Branding: Ibasho's name, window, About and login screen
 
 - App name "Ibasho" (APP_NAME, CAPITALIZED_APP_NAME; translations fall back
   to English for these), so the window title, menus and About say Ibasho.

@@ -4,7 +4,6 @@ installing and updating the viewer in place."""
 
 from __future__ import annotations
 
-import _winapi
 import json
 import os
 import sys
@@ -203,7 +202,11 @@ def test_the_keeper_binds_its_sessions(home, tmp_path):
 # ---------- uploads read from checked copies ----------
 
 def junction(link: Path, target: Path):
-    _winapi.CreateJunction(str(target), str(link))
+    if sys.platform == "win32":
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        os.symlink(target, link, target_is_directory=True)
 
 
 windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows")
@@ -308,6 +311,8 @@ def release_zip(where: Path, version: str, exe: str = "IbashoViewer.exe", channe
 
 @pytest.fixture
 def installed(home, tmp_path, capsys, monkeypatch):
+    if sys.platform != "win32":
+        pytest.skip("installs the Windows viewer's zip")
     monkeypatch.setattr(viewer_cmd, "running_from", lambda folder: [])
     cfg = write_config(home)
     dl = tmp_path / "downloads"

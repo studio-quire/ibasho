@@ -1,6 +1,9 @@
-"""Make the Windows release zip of a built Ibasho viewer.
+"""Make the release zip (Windows) or tarball (Linux) of a built Ibasho viewer.
 
     python viewer/package.py [--src TREE] [--out DIR]
+
+On Linux (build-linux.sh runs it) the result is `Ibasho-<version>-linux-x86_64.tar.xz`, made the same way from Linden
+Lab's Linux manifest. The rest of this describes Windows.
 
 The build folder (`build-vc170-64/newview/Release`) runs as it is, but it also holds what the build leaves
 behind: `secondlife-bin.exe` and its `.pdb`/`.map`/`.lib`, installer scripts, batch files. So the release is made
@@ -17,15 +20,17 @@ import argparse
 import contextlib
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import tarfile
 import time
 import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-REPO = "https://github.com/Shoalstone/ibasho"
-VIEWER_SOURCE = "https://github.com/Shoalstone/ibasho-viewer"
+REPO = "https://github.com/studio-quire/ibasho"
+VIEWER_SOURCE = "https://github.com/studio-quire/ibasho-viewer"
 TRACKER = REPO + "/issues"
 ZIP_EPOCH = 315532800 + 86400   # 1980-01-02 UTC: the earliest time a zip entry holds, with a day to spare
 NOT_SHIPPED = ("secondlife-bin.*", "*.pdb", "*.map", "*.lib", "*.exp", "*.nsi", "*.bat", "*_Setup.exe")
@@ -41,7 +46,7 @@ def ensure_build_python():
         return
     except ImportError:
         pass
-    py = work_dir() / "ab-venv" / "Scripts" / "python.exe"
+    py = work_dir() / "ab-venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if not py.is_file():
         sys.exit("package.py needs the `llsd` module: run it with the viewer build's Python (work/ab-venv), "
                  "or pip install llsd")
@@ -65,6 +70,7 @@ What to tell people, as Linden Lab's Third Party Viewer Policy asks:
 - spectator mode is on at every launch: the local mouse and keyboard don't reach the viewer;
 - it can pay L$, buy objects and pay upload fees without a confirmation dialog, within its caps
   (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost);
+- it can change the avatar's profile (about text, picture) and display name by program;
 - hideAvatars leaves chosen avatars out of what the window shows (locally, as "Do not render" does);
 - streamUI keeps other people's words off the window.
 
@@ -79,6 +85,45 @@ and the same changes are a patch series in the Ibasho repository,
 Third-party licences: licenses.txt. OpenAL Soft and freealut (OpenAL32.dll, alut.dll) are unmodified LGPL
 libraries; their source is at https://github.com/secondlife/3p-openal-soft, tag v1.24.2-r1
 (licenses\\openal-soft.txt, licenses\\freealut.txt).
+
+Second Life(R) is a trademark of Linden Research, Inc. Ibasho is not affiliated with or endorsed by Linden
+Research, Inc.
+"""
+
+
+README_LINUX = """\
+Ibasho {version}: a modified version of Linden Lab's viewer, for the Second Life® world
+Made for AI agents. Linux, x86-64.
+
+This software is not provided or supported by Linden Lab, the makers of Second Life. Ibasho comes without
+support either: reports are welcome at {tracker},
+but nobody promises an answer or a fix.
+
+It is Linden Lab's open-source viewer with Ibasho's patches: LEAP APIs so a program can do what a resident does,
+limits on spending and messages, and settings for running on a server without a graphics card. The Ibasho tooling
+(the `ibasho` command) starts it for you, and its container image brings it along; the viewer's own README in the
+Ibasho repository has the details. To start it by hand: ./ibasho-viewer (the viewer is bin/ibasho-viewer-bin, which
+needs this folder's lib/ on LD_LIBRARY_PATH).
+
+What to tell people, as Linden Lab's Third Party Viewer Policy asks:
+- a program can control this viewer completely over LEAP;
+- it can pay L$, buy objects and pay upload fees without a confirmation dialog, within its caps
+  (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost);
+- it can change the avatar's profile (about text, picture) and display name by program;
+- hideAvatars leaves chosen avatars out of what the window shows (locally, as "Do not render" does);
+- streamUI keeps other people's words off the window.
+
+Files: settings, logs, chat logs, the saved login and the cache go to ~/.ibasho (or IBASHO_USER_DIR if set).
+Uninstalling: delete this folder and ~/.ibasho. Nothing else is installed.
+
+Source: the viewer is under the GNU Lesser General Public License 2.1 (licenses/LGPL-2.1.txt). Its complete
+source, Linden Lab's viewer with Ibasho's changes, is at
+  {viewer_source} (tag v{version})
+and the same changes are a patch series in the Ibasho repository,
+  {repo} (viewer/BASE names Linden Lab's commit, viewer/patches holds the changes).
+Third-party licences: licenses.txt. OpenAL Soft and freealut (lib/libopenal.so.1, lib/libalut.so.0) are unmodified
+LGPL libraries; their source is at https://github.com/secondlife/3p-openal-soft, tag v1.24.2-r1
+(licenses/openal-soft.txt, licenses/freealut.txt). The media plugin for music and video uses the system's GStreamer.
 
 Second Life(R) is a trademark of Linden Research, Inc. Ibasho is not affiliated with or endorsed by Linden
 Research, Inc.
@@ -108,13 +153,26 @@ def machine_names_in(stage: Path) -> list:
     computer name as a word of its own (so "jo" in "Jones" doesn't count), as UTF-8 or UTF-16 and in any
     case. Returns [(relative path, what it contains)]."""
     profile = os.environ.get("USERPROFILE", "")
+    if os.name != "nt":   # a home folder names its user; a build container's or a CI runner's isn't anyone's
+        home = os.path.expanduser("~")
+        profile = home if home.startswith("/home/") else ""
     needles = []  # (what, bytes, unit, whole word)
     if profile:
         for form in {profile.replace("/", "\\"), profile.replace("\\", "/")}:
             needles += [(f"the path {profile}", form.lower().encode(enc), unit, False)
                         for enc, unit in (("utf-8", 1), ("utf-16-le", 2))]
-    for var, what in (("USERNAME", "the user name"), ("COMPUTERNAME", "the computer name")):
-        name = os.environ.get(var, "")
+    names = [("USERNAME", "the user name"), ("COMPUTERNAME", "the computer name")]
+    if os.name != "nt":
+        names = [("USER", "the user name"), ("LOGNAME", "the user name")] + ([("", "the computer name")] if profile
+                                                                            else [])
+    for extra in os.environ.get("IBASHO_FORBIDDEN_NAMES", "").split(","):   # say, the machine a container ran on
+        if len(extra.strip()) >= 3:
+            needles += [(f"the name {extra.strip()}", extra.strip().lower().encode(enc), unit, True)
+                        for enc, unit in (("utf-8", 1), ("utf-16-le", 2))]
+    for var, what in names:
+        name = os.environ.get(var, "") if var else socket.gethostname()
+        if name in ("root", "runner"):
+            continue
         if len(name) >= 3:
             needles += [(f"{what} {name}", name.lower().encode(enc), unit, True)
                         for enc, unit in (("utf-8", 1), ("utf-16-le", 2))]
@@ -166,8 +224,91 @@ def run_manifest(src: Path, dest: Path, log: Path) -> list:
     return files
 
 
+def run_linux_manifest(src: Path, dest: Path, log: Path) -> list:
+    """Linden Lab's Linux manifest, copy action only, into dest (the build's own copy is build/newview/packaged)."""
+    newview = src / "indra" / "newview"
+    build = src / "build-linux-x86_64" / "newview"
+    sys.path.insert(0, str(newview))
+    import viewer_manifest as vm
+    vm.ViewerManifest.is_packaging_viewer = lambda self: True
+    extra = [dict(name=n, description="", default=d) for n, d in
+             (("bugsplat", ""), ("discord", "OFF"), ("openal", "OFF"), ("tracy", "OFF"), ("velopack", "OFF"))]
+    argv = ["viewer_manifest.py", "--actions=copy", "--arch=x86_64", f"--artwork={newview}", "--bugsplat=",
+            "--discord=", "--openal=ON", "--tracy=OFF", "--velopack=OFF", f"--build={build}",
+            "--buildtype=Release", "--channel=Ibasho", "--configuration=.", f"--dest={dest}", "--grid=agni",
+            f"--source={newview}", f"--versionfile={build / 'viewer_version.txt'}"]
+    files: list = []
+    real_do = vm.LLManifest.do
+
+    def do(self, *actions):
+        out = real_do(self, *actions)
+        files.extend(out)
+        return out
+    vm.LLManifest.do = do
+    old_argv, old_cwd = sys.argv, os.getcwd()
+    try:
+        sys.argv = argv
+        os.chdir(build)
+        with open(log, "w", encoding="utf-8") as f, contextlib.redirect_stdout(f):
+            vm.main(extra=extra)
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+    return files
+
+
+def main_linux(a, src: Path, out: Path):
+    build = src / "build-linux-x86_64"
+    version = (build / "newview" / "viewer_version.txt").read_text().strip()
+    if not (build / "newview" / "secondlife-bin").is_file():
+        sys.exit(f"no built viewer in {build / 'newview'}: run build-linux.sh first")
+    name = f"Ibasho-{version}-linux-x86_64"
+    stage = out / name
+    if stage.exists():
+        shutil.rmtree(stage)
+    stage.mkdir(parents=True)
+    log = out / f"{name}-manifest.log"
+    files = run_linux_manifest(src, stage, log)
+    binary = stage / "bin" / "ibasho-viewer-bin"
+    if not binary.is_file() or not (stage / "ibasho-viewer").is_file():
+        sys.exit(f"the staged viewer looks wrong (no bin/ibasho-viewer-bin or ibasho-viewer); see {log}")
+    subprocess.run(["strip", "-S", str(binary)], check=False)   # the manifest strips only when it packages
+    for p in (binary, stage / "ibasho-viewer", stage / "bin" / "SLPlugin"):
+        if p.is_file():
+            p.chmod(0o755)
+    lic = stage / "licenses"
+    lic.mkdir(exist_ok=True)
+    shutil.copyfile(src / "doc" / "LGPL-license.txt", lic / "LGPL-2.1.txt")
+    for n in ("openal-soft.txt", "freealut.txt"):
+        shutil.copyfile(build / "packages" / "LICENSES" / n, lic / n)
+    (stage / "README.txt").write_text(README_LINUX.format(version=version, tracker=TRACKER, repo=REPO,
+                                                          viewer_source=VIEWER_SOURCE), encoding="utf-8")
+    if not a.allow_profile_paths:
+        hits = machine_names_in(stage)
+        if hits:
+            for rel, what in hits[:20]:
+                print(f"  {rel}: {what}", file=sys.stderr)
+            sys.exit(f"{len(hits)} shipped files name this machine or its user (above). The compiler writes source "
+                     "paths into the binaries, so build release binaries outside a home folder (in the build "
+                     "container, say), or pass --allow-profile-paths for a tarball that stays on this machine")
+    tpath = out / f"{name}.tar.xz"
+    tpath.unlink(missing_ok=True)
+    epoch = int(os.environ.get("SOURCE_DATE_EPOCH") or time.time())
+
+    def clean(info: tarfile.TarInfo) -> tarfile.TarInfo:
+        info.uid = info.gid = 0
+        info.uname = info.gname = ""
+        info.mtime = min(info.mtime, epoch)
+        return info
+    with tarfile.open(tpath, "w:xz", preset=6) as t:
+        t.add(stage, arcname=name, filter=clean)
+    n = sum(1 for p in stage.rglob("*") if p.is_file())
+    print(f"{tpath}: {n} files ({len(files)} from the manifest), {tpath.stat().st_size / 1e6:.0f} MB")
+    print(f"staged in {stage} (the manifest's log: {log})")
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Make the Windows release zip of a built Ibasho viewer.")
+    ap = argparse.ArgumentParser(description="Make the release zip or tarball of a built Ibasho viewer.")
     ap.add_argument("--src", help="the patched viewer tree (default: work/viewer-src)")
     ap.add_argument("--out", help="where the zip goes (default: work/dist)")
     ap.add_argument("--allow-profile-paths", action="store_true",
@@ -177,6 +318,9 @@ def main():
     ensure_build_python()
     src = Path(a.src).resolve() if a.src else work_dir() / "viewer-src"
     out = Path(a.out).resolve() if a.out else work_dir() / "dist"
+    if sys.platform.startswith("linux"):
+        out.mkdir(parents=True, exist_ok=True)
+        return main_linux(a, src, out)
     build = src / "build-vc170-64"
     version = (build / "newview" / "viewer_version.txt").read_text().strip()
     if not (build / "newview" / "Release" / "secondlife-bin.exe").is_file():

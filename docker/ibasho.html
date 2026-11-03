@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<!-- The person's view of the viewer while they log in (login-view.sh prints its link). noVNC's own vnc.html, beside
+     it, doesn't carry the browser's clipboard to the remote screen; this page does: Ctrl+V (Cmd+V on a Mac) in the
+     view sends the browser's clipboard to the server and presses Ctrl+V there. The password comes in the link's
+     fragment (#password=...), which the browser doesn't send to the server. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ibasho: log in</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; background: #2b2d31; color: #e8e8ea;
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #bar { display: flex; align-items: center; gap: 12px; padding: 6px 12px; background: #1e1f22;
+         border-bottom: 1px solid #3a3c42; }
+  #line { flex: 1; }
+  #state { color: #a9abb3; }
+  #bar button { font: inherit; color: inherit; background: #3a3c42; border: 1px solid #4a4d55; border-radius: 4px;
+                padding: 2px 10px; cursor: pointer; }
+  #bar button:hover { background: #45484f; }
+  #screen { flex: 1; overflow: hidden; }
+  #catcher { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none;
+             border: 0; padding: 0; resize: none; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span id="line">Click in the viewer to type. To paste, press <b id="keys">Ctrl+V</b>.</span>
+  <button id="paste" type="button" title="Paste what you copied into the viewer">Paste</button>
+  <span id="state">Connecting…</span>
+</div>
+<div id="screen"></div>
+<textarea id="catcher" tabindex="-1" aria-hidden="true"></textarea>
+<script type="module">
+import RFB from './core/rfb.js';
+
+const XK_Control_L = 0xffe3, XK_v = 0x0076;
+const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+if (mac) document.getElementById('keys').textContent = '⌘V';
+
+const state = text => { document.getElementById('state').textContent = text; };
+const param = name => {
+  const m = (location.hash + '&' + location.search.slice(1)).match(new RegExp('(?:^#|&)' + name + '=([^&]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+};
+
+const screen = document.getElementById('screen');
+const catcher = document.getElementById('catcher');
+const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/websockify';
+const rfb = new RFB(screen, url, { credentials: { password: param('password') || '' } });
+rfb.scaleViewport = true;
+rfb.addEventListener('connect', () => { state('Connected'); rfb.focus(); });
+let refused = false;
+rfb.addEventListener('securityfailure', () => {
+  refused = true;
+  state('Wrong password: use the newest link you were given');
+});
+rfb.addEventListener('disconnect', e => {
+  if (!refused) state(e.detail.clean ? 'Closed: the viewer has quit, or the view was stopped'
+                                     : 'Disconnected: reload the page to try again');
+});
+rfb.addEventListener('credentialsrequired', () => {
+  rfb.sendCredentials({ password: prompt('The password from the link you were given:') || '' });
+});
+
+// Put text on the server's clipboard and press Ctrl+V there. noVNC holds no keys by now (see below), so the server
+// sees Ctrl+V and nothing else, whichever modifier the person pressed here.
+//
+// x11vnc takes clipboard text as Latin-1 (noVNC cuts anything else down to a byte) and hands the bytes unchanged
+// to programs asking for UTF-8, as the viewer does. So it gets UTF-8 bytes, one per character: the viewer then
+// receives the text intact, accents, other scripts and emoji included. Line ends become Linux's.
+function pasteText(text) {
+  if (!text) return;
+  let bytes = '';
+  for (const b of new TextEncoder().encode(text.replace(/\r\n?/g, '\n'))) bytes += String.fromCharCode(b);
+  rfb.clipboardPasteFrom(bytes);
+  rfb.sendKey(XK_Control_L, 'ControlLeft', true);
+  rfb.sendKey(XK_v, 'KeyV', true);
+  rfb.sendKey(XK_v, 'KeyV', false);
+  rfb.sendKey(XK_Control_L, 'ControlLeft', false);
+}
+
+// Ctrl+V on the screen: noVNC would send the keys on and swallow the browser's paste. Catch the key before it does,
+// release the keys it holds down on the server (its handler for the window losing focus), and move focus to a hidden
+// text box without stopping the browser's default: the browser then pastes into the box, which hands us the text
+// with no permission prompt.
+let refocus = null;
+window.addEventListener('keydown', e => {
+  if (!screen.contains(document.activeElement)) return;
+  const v = e.key === 'v' || e.key === 'V' || e.code === 'KeyV';
+  const paste = ((e.ctrlKey || e.metaKey) && !e.altKey && v) || (e.shiftKey && e.code === 'Insert');
+  if (!paste) return;
+  e.stopImmediatePropagation();
+  window.dispatchEvent(new Event('blur'));
+  catcher.value = '';
+  catcher.focus();
+  refocus = setTimeout(() => rfb.focus(), 500);   // nothing to paste (an image, say): no paste event comes
+}, true);
+
+catcher.addEventListener('paste', e => {
+  e.preventDefault();
+  clearTimeout(refocus);
+  rfb.focus();
+  pasteText(e.clipboardData.getData('text/plain'));
+});
+
+// The button, for pasting without the keyboard. Reading the clipboard this way may ask the person's permission.
+document.getElementById('paste').addEventListener('click', async () => {
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    state('The browser didn’t allow reading the clipboard: press Ctrl+V in the viewer instead');
+  }
+  rfb.focus();
+  pasteText(text);
+});
+</script>
+</body>
+</html>

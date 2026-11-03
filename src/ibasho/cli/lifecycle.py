@@ -6,11 +6,14 @@ import argparse
 import json
 import os
 import re
+import shutil
+import sys
 import time
+import urllib.parse
 from pathlib import Path
 
 from .. import config as config_mod, launch, procs, stub
-from ..config import flag_check, leap_token, save_flag_check
+from ..config import LINDEN_GRIDS, flag_check, leap_token, save_flag_check
 from ..api import ApiError, Down
 from .common import Ctx, Fail, is_uuid, name_of, names, out_json, position, short
 
@@ -19,10 +22,14 @@ def register(sub):
     p = sub.add_parser("init", help="write a config file to fill in")
     p.add_argument("--name", default="", help="the avatar's name")
     p.add_argument("--grid", default="secondlife", help="secondlife, aditi, or another grid's login URL")
-    p.add_argument("--viewer", default="", help="path to the viewer's exe")
+    p.add_argument("--viewer", default=os.environ.get("IBASHO_VIEWER", ""),
+                   help="path to the viewer's exe (default: IBASHO_VIEWER, which the container image sets)")
     p.set_defaults(fn=init)
     sub.add_parser("check", help="check the config and install").set_defaults(fn=check)
     p = sub.add_parser("login", help="for the person: open the viewer to log in once by hand (remembered after)")
+    p.add_argument("--start", metavar="REGION",
+                   help="log in at this region (Second Life's main grid) instead of where the avatar was last, or "
+                        "its home: for a home that sends it somewhere it can't go")
     p.set_defaults(fn=login)
     p = sub.add_parser("up", help="start the daemon and the viewer, log in from the saved login, wait till in world")
     p.add_argument("--timeout", type=float, default=180)
@@ -81,10 +88,8 @@ def check(ctx: Ctx, a):
         problems.append("the last in-world check found the account unflagged")
     notes = []
     if cfg.linden_grid and "flagged" not in flag:
-        notes.append("the scripted-agent flag and the display name haven't been checked in world yet: "
+        notes.append("the scripted-agent flag hasn't been checked in world yet: "
                      "`ibasho selfcheck` once in world, somewhere you can build")
-    elif cfg.linden_grid and flag.get("display_name") is not None and not says_ai(flag["display_name"]):
-        notes.append(display_name_hint(flag["display_name"]))
     print(f"data {cfg.data_dir} (events kept {cfg.retention_days} days)")
     c = cfg.caps
     print(f"caps: L${c.max_payment}/payment, L${c.max_session_spend}/login, L${c.max_daily_spend}/day, "
@@ -188,16 +193,26 @@ def login(ctx: Ctx, a):
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
     # No --leap: nothing but the person touches this viewer while the password is on screen. It's theirs to
     # use, so it comes to the front as a normal window would (the agent's never does: launch_viewer).
-    args = [str(exe), "--grid", cfg.grid_arg, "--multiple", "--set", "IbashoSpectator", "0",
-            "--set", "IbashoNoActivate", "0", "--set", "RememberUser", "1", "--set", "RememberPassword", "1"]
-    pid = procs.spawn(launch.windows_cmdline(args), cfg.state_dir / "viewer.log", cwd=exe.parent)
+    args = ["--grid", cfg.grid_arg, "--multiple", "--set", "IbashoSpectator", "0", "--set", "IbashoNoActivate", "0",
+            "--set", "RememberUser", "1", "--set", "RememberPassword", "1", *server_args(cfg, web=True),
+            *start_slurl(cfg, a.start)]   # --url goes last
+    try:
+        cmd, cwd, extra = launch.viewer_process(exe, args)
+    except launch.LaunchError as e:
+        raise Fail(str(e)) from None
+    pid = procs.spawn(cmd, cfg.state_dir / "viewer.log", cwd=cwd, env=procs.env_with(**extra) if extra else None)
     procs.write_pid(cfg.state_dir / "viewer.pid", pid)
+    if view := login_view(pid):
+        print(view)
     print("The viewer is open for the person to log in once, by hand:\n"
           "  1. Log in with the avatar's name and password, with \"Remember username\" and \"Remember password\"\n"
           "     ticked (they are by default).\n"
           "  2. Accept the Terms of Service if asked (that's yours to read and agree to, not the model's).\n"
           "  3. Once in world, quit the viewer (File > Quit or close the window).\n"
-          "After that, `ibasho up` logs in from the saved login; the password never passes through Ibasho.")
+          "After that, `ibasho up` logs in from the saved login; the password never passes through Ibasho.\n"
+          "If the viewer gets stuck once in world (a teleport that keeps failing, say) and won't quit, `ibasho down`\n"
+          "closes it: the login is saved by then. If that was the account's home, `ibasho login --start REGION`\n"
+          "logs in somewhere else.")
 
 
 def stop_daemon(ctx: Ctx):
@@ -244,21 +259,64 @@ def _src_path() -> str:
     return os.pathsep.join(p for p in (here, os.environ.get("PYTHONPATH", "")) if p)
 
 
+def server_args(cfg, web: bool | None = None) -> list[str]:
+    """The viewer's command-line settings for running without a graphics card ([server]); the rest are set over
+    LEAP once it's in world, where its graphics presets can't undo them (the daemon's `apply_server_settings`).
+    `web` overrides server.web (the person's login has the browser: Linden Lab's terms are a web page)."""
+    s = cfg.server
+    if not s.enabled:
+        return []
+    w, h = s.window_size()
+    args = ["--set", "FullScreen", "0", "--set", "WindowWidth", str(w), "--set", "WindowHeight", str(h),
+            "--set", "EnableVoiceChat", "1" if s.voice else "0"]
+    if s.voice and sys.platform != "win32":
+        # voice chat on a sink of its own, never the one hearing's viewer ear records (docs/hearing.md)
+        from ..hearing.capture import voice_device_for_viewer
+        parec = shutil.which("parec")
+        if dev := voice_device_for_viewer(Path(parec) if parec else None):
+            args += ["--set", "VoiceOutputAudioDevice", dev]
+    if cfg.ibasho_viewer:
+        web = s.web if web is None else web
+        args += ["--set", "IbashoNoWebPlugin", "0" if web else "1", "--set", "IbashoMaxFPS", f"{s.max_fps:g}"]
+    return args
+
+
+def login_view(viewer_pid: int) -> str | None:
+    """For a viewer that isn't on a screen in front of the person (a server's virtual display): opens their view of
+    it for the login, and returns what they do to see it. IBASHO_LOGIN_VIEW names the program that provides the
+    view (the container's is noVNC through an SSH tunnel), run as `PROGRAM start VIEWER_PID`: it prints the
+    person's instructions and closes the view when that viewer exits. Unset: the viewer is on a screen of its own."""
+    program = os.environ.get("IBASHO_LOGIN_VIEW")
+    if not program:
+        return None
+    import subprocess
+    try:
+        r = subprocess.run([program, "start", str(viewer_pid)], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Fail(f"the viewer started, but the person's view of it didn't ({program}: {e})") from None
+    if r.returncode:
+        raise Fail(f"the viewer started, but the person's view of it didn't: {(r.stderr or r.stdout).strip()}")
+    return r.stdout.rstrip()
+
+
 def launch_viewer(ctx: Ctx):
     cfg = ctx.cfg
     exe = viewer_exe(cfg)
     try:
-        cwd, leap = launch.leap_command(Path(procs.pythonw()), Path(stub.__file__))
+        leap_cwd, leap = launch.leap_command(Path(procs.pythonw()), Path(stub.__file__))
         # IbashoNoActivate: the window never takes focus or comes in front of what the person is doing (the
         # viewer's default too; said here so it holds whatever the viewer's settings say)
-        cmdline = launch.windows_cmdline([str(exe), "--leap", leap, "--grid", cfg.grid_arg, "--autologin",
-                                          "--multiple", "--set", "IbashoNoActivate", "1"])
+        cmd, cwd, extra = launch.viewer_process(exe, ["--leap", leap, "--grid", cfg.grid_arg, "--autologin",
+                                                      "--multiple", "--set", "IbashoNoActivate", "1",
+                                                      *server_args(cfg), *start_slurl(cfg)])   # --url goes last
     except launch.LaunchError as e:
         raise Fail(str(e)) from None
+    if sys.platform == "win32":
+        cwd = leap_cwd   # the --leap command names Python relative to it
     env = procs.env_with(IBASHO_LEAP_PORT=cfg.leap_port, IBASHO_LEAP_TOKEN=leap_token(ctx.api.token),
-                         IBASHO_STUB_LOG=cfg.state_dir / "stub.log")
+                         IBASHO_STUB_LOG=cfg.state_dir / "stub.log", **extra)
     (cfg.state_dir / "viewer.log").write_bytes(b"")
-    pid = procs.spawn(cmdline, cfg.state_dir / "viewer.log", cwd=cwd, env=env)
+    pid = procs.spawn(cmd, cfg.state_dir / "viewer.log", cwd=cwd, env=env)
     procs.write_pid(cfg.state_dir / "viewer.pid", pid)
     return pid
 
@@ -290,9 +348,50 @@ def needs_person(ctx: Ctx, since: int) -> str | None:
     return None
 
 
+def remember_place(ctx: Ctx):
+    """Where the avatar is, for the next login to start there. Second Life's own "last location" can give the
+    account's home instead (seen on the real grid, 2026-11-03), which may be somewhere it can't stay."""
+    try:
+        if not ctx.api.ibasho:
+            return
+        region = str(ctx.api.op("IbashoAgent", "parcel", timeout=5).get("region", {}).get("name") or "")
+        pos = position(ctx)["region"]
+    except (ApiError, KeyError, TypeError):
+        return
+    if region:
+        place = {"grid": ctx.cfg.grid_arg, "region": region, "pos": [round(float(v)) for v in pos[:3]],
+                 "t": time.time()}
+        (ctx.cfg.state_dir / "last_place.json").write_text(json.dumps(place), encoding="utf-8")
+
+
+def start_slurl(cfg, region: str | None = None) -> list[str]:
+    """The viewer's start location for a login: `region` if given, else where the avatar was at its last `down`, if
+    that's recent; else the viewer's own choice, which for the person's login is the account's home (a new
+    account's can be an orientation island that keeps trying to send it on to a place that refuses it, leaving the
+    person's viewer stuck teleporting: seen 2026-11-03). Only on Second Life's main grid: the viewer reads secondlife://REGION/X/Y/Z as a
+    place there and switches its login to that grid, whatever --grid said (on a test grid it sent the login to
+    Linden Lab's)."""
+    if cfg.grid_arg != LINDEN_GRIDS["secondlife"]:
+        if region:
+            raise Fail("--start works only on Second Life's main grid")
+        return []
+    if region and region.strip():
+        return ["--url", f"secondlife://{urllib.parse.quote(region.strip())}/128/128/30"]
+    try:
+        place = json.loads((cfg.state_dir / "last_place.json").read_text(encoding="utf-8"))
+        if place.get("grid") != cfg.grid_arg or time.time() - float(place["t"]) > 30 * 86400:
+            return []
+        x, y, z = (min(255, max(0, int(v))) for v in place["pos"])
+        region = urllib.parse.quote(str(place["region"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    return ["--url", f"secondlife://{region}/{x}/{y}/{z}"]
+
+
 def quit_viewer(ctx: Ctx, wait: float = 20):
     cfg = ctx.cfg
     pid = viewer_pid(cfg)
+    remember_place(ctx)
     try:
         ctx.api.post("LLAppViewer", "requestQuit")
     except ApiError:
@@ -377,8 +476,6 @@ def up(ctx: Ctx, a):
         print(line)
     if cfg.linden_grid and "flagged" not in flag_check(cfg):
         print("the scripted-agent flag hasn't been checked in-world yet: `ibasho selfcheck` somewhere you can build")
-    if cfg.linden_grid and me.get("display_name") and not says_ai(me["display_name"]):
-        print(display_name_hint(me["display_name"]))
     from . import ears
     if line := ears.start_if_enabled(ctx):
         print(line)
@@ -399,18 +496,6 @@ def stranded(ctx: Ctx, st: dict) -> str | None:
             pass
         time.sleep(2)
     return "the viewer is logged in but not in any region (cut off after failed teleports?)"
-
-
-AI_NAME = re.compile(r"\bAI\b|\bbot\b", re.I)
-
-
-def says_ai(display_name: str) -> bool:
-    return bool(AI_NAME.search(display_name or ""))
-
-
-def display_name_hint(shown: str) -> str:
-    return (f"the display name ({shown!r}) doesn't say AI; people should be able to tell. The person sets it (the "
-            "viewer's Me > Preferences, or on the web) along with a line in the profile (docs/setup.md, step 2)")
 
 
 def down(ctx: Ctx, a):
@@ -478,9 +563,13 @@ def selfcheck(ctx: Ctx, a):
         if not api.ibasho:
             raise Fail("without the Ibasho viewer, give --host (one of your objects within reach)")
         here = position(ctx)["region"]
-        r = api.op("IbashoBuild", "create", {"shape": "box", "scale": [0.2, 0.2, 0.2], "temp": True, "phantom": True,
-                                             "name": "ibasho self-check", "pos": [here[0], here[1], here[2] + 1.5]},
-                   timeout=20)
+        try:
+            r = api.op("IbashoBuild", "create", {"shape": "box", "scale": [0.2, 0.2, 0.2], "temp": True,
+                                                 "phantom": True, "name": "ibasho self-check",
+                                                 "pos": [here[0], here[1], here[2] + 1.5]}, timeout=20)
+        except ApiError as e:
+            raise Fail(f"the check needs a moment's building, and it isn't allowed here ({e}): try it in a sandbox, "
+                       "or give --host (one of your objects within reach)") from None
         temp = host = r["id"]
         make.unselect_on_sim(ctx, host)
     else:
@@ -502,8 +591,6 @@ def selfcheck(ctx: Ctx, a):
     save_flag_check(cfg, api.status().get("grid") or cfg.grid_arg,
                     {"t": time.time(), "flagged": ok, "display_name": shown})
     print(("flagged as a scripted agent" if ok else "NOT flagged as a scripted agent") + f"; display name {shown!r}")
-    if not says_ai(shown):
-        print(display_name_hint(shown))
     if not ok and cfg.linden_grid:
         quit_viewer(ctx)
         raise Fail("logged out: this account isn't flagged. The person flags it at "

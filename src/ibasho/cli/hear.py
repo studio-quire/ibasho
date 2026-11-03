@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from dataclasses import dataclass
 
 from ..api import ApiError, Down
 from .common import Ctx, Fail, clock, fmt_event, is_uuid, mentions, need_ibasho, out_json, rid, short
@@ -124,6 +125,20 @@ def notable(e: dict, me: str | None, money_events: bool = False) -> bool:
     if e["kind"] == "chat":
         return not tool_line(d) and d.get("chat_type") not in (4, 5)
     return wake_worthy(e, me, money_events) or e["kind"] == "im"
+
+
+@dataclass
+class Wake:
+    """One thing worth waking for: the line `watch` prints for it, and what else MCPL's push events (mcpl.py) say
+    about it."""
+    line: str
+    seq: int = 0                 # the newest event behind it; 0 for none (the unread line)
+    t: float = 0.0
+    event: dict | None = None    # the event, when it's one event
+    digest: str | None = None    # "group" or "object": lines gathered into one
+    named: bool = False          # my name comes up in it
+    talking: bool = False        # I've spoken there lately (near me, or in that group)
+    who: tuple[str, str] | None = None   # (id, name): a digest's group or object
 
 
 # ---------- quieted objects ----------
@@ -282,7 +297,7 @@ class ObjectDigest:
         if self.me_re and self.me_re.search(d.get("message") or ""):
             return True
         if oid in self.buf or len(times) > OBJECT_REPEAT:
-            self.buf.setdefault(oid, []).append(d)
+            self.buf.setdefault(oid, []).append(e)
             self.first.setdefault(oid, now)
             return False
         return True
@@ -290,19 +305,22 @@ class ObjectDigest:
     def next_due(self) -> float | None:
         return min(self.first.values()) + OBJECT_DIGEST_S if self.first else None
 
-    def flush(self, force=False) -> list[str]:
-        lines, now = [], time.time()
+    def flush(self, force=False) -> list[Wake]:
+        out, now = [], time.time()
         for oid in list(self.buf):
             if force or now - self.first[oid] >= OBJECT_DIGEST_S:
-                msgs = self.buf.pop(oid)
+                evs = self.buf.pop(oid)
+                msgs = [e["data"] for e in evs]
                 mins = max(1, round((now - self.first.pop(oid)) / 60))
                 last = " | ".join((m.get("message") or "")[:160] for m in msgs[-3:])
-                lines.append(f"object digest {msgs[-1].get('from')!r} ({short(oid)}) said {len(msgs)} "
-                             f"line{'s' if len(msgs) != 1 else ''} in {mins} min, the last: {last} (it keeps "
-                             f"talking: `ibasho quiet {short(oid)}` leaves it out)")
+                name = msgs[-1].get("from")
+                out.append(Wake(f"object digest {name!r} ({short(oid)}) said {len(msgs)} "
+                                f"line{'s' if len(msgs) != 1 else ''} in {mins} min, the last: {last} (it keeps "
+                                f"talking: `ibasho quiet {short(oid)}` leaves it out)",
+                                seq=evs[-1]["seq"], t=evs[-1]["t"], digest="object", who=(oid, str(name or ""))))
         for oid in [o for o, ts in self.said.items() if not ts or now - ts[-1] > OBJECT_WINDOW_S]:
             self.said.pop(oid)
-        return lines
+        return out
 
 
 def collapse_repeats(evs: list[dict], q: Quiet | None) -> list[tuple[dict, str | None]]:
@@ -354,27 +372,32 @@ class GroupDigest:
             self.buf.pop(sid, None)
             self.first.pop(sid, None)
             return False
-        if (self.me_re and self.me_re.search(d.get("message") or "")) or \
-                time.time() - self.my_last.get(sid, 0) < GROUP_LIVE_S:
+        if (self.me_re and self.me_re.search(d.get("message") or "")) or self.talking(sid):
             return True
-        self.buf.setdefault(sid, []).append(d)
+        self.buf.setdefault(sid, []).append(e)
         self.first.setdefault(sid, time.time())
         return False
+
+    def talking(self, sid) -> bool:
+        """I've spoken in this group lately."""
+        return time.time() - self.my_last.get(sid, 0) < GROUP_LIVE_S
 
     def next_due(self) -> float | None:
         return min(self.first.values()) + GROUP_DIGEST_S if self.first else None
 
-    def flush(self, force=False) -> list[str]:
-        lines = []
+    def flush(self, force=False) -> list[Wake]:
+        out = []
         for sid in list(self.buf):
             if force or time.time() - self.first[sid] >= GROUP_DIGEST_S:
-                msgs = self.buf.pop(sid)
+                evs = self.buf.pop(sid)
+                msgs = [e["data"] for e in evs]
                 self.first.pop(sid)
                 name = msgs[0].get("session_name") or short(sid)
                 body = " | ".join(f"{m.get('from')}: {(m.get('message') or '')[:160]}" for m in msgs[-12:])
                 more = f" (+{len(msgs) - 12} earlier)" if len(msgs) > 12 else ""
-                lines.append(f"group digest [{name}] {len(msgs)} msgs{more}: {body}")
-        return lines
+                out.append(Wake(f"group digest [{name}] {len(msgs)} msgs{more}: {body}", seq=evs[-1]["seq"],
+                                t=evs[-1]["t"], digest="group", who=(str(sid or ""), str(name))))
+        return out
 
 
 def unread_line(ctx: Ctx) -> str | None:
@@ -423,12 +446,17 @@ class Watcher:
         self.quiet = Quiet(ctx)
         self.crowd, self.crowd_at, self.last_said = False, 0.0, 0.0
         self.shown: dict[str, float] = {}
+        self.lost = False   # the viewer's connection was lost, and this watch said so
 
     def poll(self, wait: float = 25) -> list[str]:
         """Lines worth waking for: group digests now due, else what the next batch of events (within `wait` seconds)
         holds, which may be nothing. Down and ApiError pass through."""
-        if lines := self.groups.flush() + self.objects.flush():
-            return lines
+        return [w.line for w in self.poll_wakes(wait)]
+
+    def poll_wakes(self, wait: float = 25) -> list[Wake]:
+        """As poll, with what each line is about."""
+        if due_now := self.groups.flush() + self.objects.flush():
+            return due_now
         if due := min((d for d in (self.groups.next_due(), self.objects.next_due()) if d), default=None):
             wait = min(wait, max(0.1, due - time.time()))
         api = self.ctx.api
@@ -446,37 +474,48 @@ class Watcher:
                 pass
         if evs:
             self.cursor.write_text(f"{evs[-1]['seq']} {time.time()}")
-        lines = []
+        out = []
         for e in evs:
             self.since = max(self.since, e["seq"])
-            if self.wakes(e):
-                lines.append(fmt_event(self.ctx, e).replace("\n", " "))
-        return lines
+            if w := self.wake(e):
+                out.append(w)
+        return out
 
-    def wakes(self, e: dict) -> bool:
+    def wake(self, e: dict) -> Wake | None:
         d = e.get("data") or {}
         if e["kind"] == "chat" and d.get("from_id") == self.me:
             self.last_said = time.time()
+        text = str(d.get("message") or d.get("text") or "")
+        named = bool(self.me_re and self.me_re.search(text)) or (e["kind"].startswith("heard") and bool(d.get("me")))
         if GroupDigest.is_group(e):
-            return self.groups.take(e)
+            if not self.groups.take(e):
+                return None
+            return self.wake_for(e, named=named, talking=self.groups.talking(d.get("session_id")))
+        if e["kind"] == "daemon" and d.get("msg") == "in world" and self.lost:
+            self.lost = False   # back after a lost connection this watch reported: say so
+            return self.wake_for(e)
         if not wake_worthy(e, self.me, self.ctx.api.ibasho):
-            return False
+            return None
+        if e["kind"] == "daemon" and re.search(r"disconnected|closing", str(d.get("msg") or "")):
+            self.lost = True
         if self.quiet.match(e):
-            return False
+            return None
         if ObjectDigest.is_object_chat(e) and not self.objects.take(e):
-            return False
+            return None
+        talking = e["kind"] == "chat" and time.time() - self.last_said < 90
         if self.crowd and e["kind"] == "chat":
-            msg = d.get("message") or ""
-            if not ((self.me_re and self.me_re.search(msg)) or ROOM_SOCIAL.search(msg)
-                    or time.time() - self.last_said < 90):
-                return False
+            if not (named or ROOM_SOCIAL.search(text) or talking):
+                return None
         if e["kind"] == "notify" and d.get("name") == "ScriptDialog":
             if self.seen(d.get("message") or "", 600):
-                return False   # menus re-send themselves after every choice
+                return None   # menus re-send themselves after every choice
         if e["kind"] == "refused":
             if self.seen(f"refused {d.get('what')}", 60):
-                return False   # one line a minute per kind of refusal is enough to know
-        return True
+                return None   # one line a minute per kind of refusal is enough to know
+        return self.wake_for(e, named=named, talking=talking)
+
+    def wake_for(self, e: dict, **flags) -> Wake:
+        return Wake(fmt_event(self.ctx, e).replace("\n", " "), seq=e["seq"], t=e["t"], event=e, **flags)
 
     def seen(self, key: str, within: float) -> bool:
         if time.time() - self.shown.get(key, 0) < within:
@@ -487,6 +526,9 @@ class Watcher:
     def drain(self) -> list[str]:
         """Group chat and objects' lines still being gathered, as digests now (before stopping, so they aren't
         lost)."""
+        return [w.line for w in self.drain_wakes()]
+
+    def drain_wakes(self) -> list[Wake]:
         return self.groups.flush(force=True) + self.objects.flush(force=True)
 
 

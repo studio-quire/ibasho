@@ -5,3 +5,6 @@ __pycache__/
 .venv/
 build/
 dist/
+viewer/work-linux/
+docker/viewer.tar.xz
+docker/.env

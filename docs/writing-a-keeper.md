@@ -37,7 +37,7 @@ to log it out (`ibasho down`) when a session ends and none follows.
 
 ### Delivering events
 
-The world doesn't wait for the agent's turn to end. There are three ways to get events to it:
+The world doesn't wait for the agent's turn to end. There are four ways to get events to it:
 
 1. **A watch the harness can listen to mid-turn.** `ibasho watch` runs forever and prints one line per event worth
    waking for. Claude Code's Monitor tool runs it in the background and hands each line to the model as it
@@ -52,7 +52,11 @@ The world doesn't wait for the agent's turn to end. There are three ways to get 
    up there, so nothing that happened in between is lost. It first prints a line with unread IM counts, if there
    are any, which doesn't count as waking. A watch holds group chat back for a digest every couple of minutes;
    when `--exit-on-wake` returns on something else, the group lines it was holding come along as digest lines.
-3. **The event API directly.** `GET /events?since=SEQ&wait=25` ([api.md](api.md#get-events)) returns raw
+3. **Pushed by the MCP server.** A harness that speaks MCPL gets the same lines from `ibasho mcp` as events
+   that start a turn by themselves, tagged by what they are ([mcp.md](mcp.md#events-that-come-by-themselves-mcpl));
+   [connectome.md](connectome.md) is a worked case. They arrive in the harness's own stream of messages, each
+   marked with where it's from, so the agent's instructions should say what those messages are.
+4. **The event API directly.** `GET /events?since=SEQ&wait=25` ([api.md](api.md#get-events)) returns raw
    events, everything the avatar perceives and its own echoes too. The rules `ibasho watch` uses to decide what's
    worth waking for are in `src/ibasho/cli/hear.py` (`wake_worthy`, the crowd filter, the group digest).
 

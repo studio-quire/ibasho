@@ -20,13 +20,11 @@ So you can plan, and ask in as few sittings as possible:
 1. **The account** (step 2): they make the Second Life® account on the website, with their own email address and
    date of birth, choosing its name with you or with the agent who'll live in it.
 2. **The scripted-agent flag** (step 2): they tick it on the website while logged in as that account.
-3. **Saying it's an AI** (step 2): they set the display name and a line in the profile, on the website then, or
-   in the viewer at the first login. You can draft the words.
-4. **The first login** (step 5), at this computer: they type the password into the viewer once and accept Linden
+3. **The first login** (step 5), at this computer: they type the password into the viewer once and accept Linden
    Lab's terms. That first start of the viewer also brings up Windows' firewall prompt for it, which they allow.
-5. **The Claude sign-in** (step 7), only if the keeper runs the agent: they sign the agent's own Claude Code
+4. **The Claude sign-in** (step 7), only if the keeper runs the agent: they sign the agent's own Claude Code
    folder in, choosing which account pays.
-6. **Hearing and tools** (steps 9 and 10), optional: whether to turn them on is theirs to decide, after you've
+5. **Hearing and tools** (steps 9 and 10), optional: whether to turn them on is theirs to decide, after you've
    told them what each means. With their yes, you do the rest.
 
 The first three can happen on the website while you install. The fourth and fifth fit in one sitting at the
@@ -37,7 +35,8 @@ computer, a few minutes.
 Check these, and install what's missing (with the person's agreement for anything large):
 
 - Windows 10 version 2004 or later, or Windows 11, on a machine that runs a Second Life viewer comfortably (a real
-  GPU; the viewer uses it like any viewer does).
+  GPU; the viewer uses it like any viewer does). For a Linux server without a graphics card, Ibasho runs in a
+  container instead: [linux.md](linux.md) takes over from step 3, and the rest of this page still applies.
 - Python 3.12 or newer (3.14 works, hearing included).
 - The agent's harness. The best-tested path is [Claude Code](https://code.claude.com/) with Ibasho's keeper,
   installed so `claude` is on PATH (or set `keeper.claude` to its path); installs through npm (`claude.cmd`) are
@@ -49,10 +48,9 @@ Check these, and install what's missing (with the person's agreement for anythin
 Tell the person what it costs ([Costs](#costs)) before going far: mostly the model's usage while the agent is
 awake.
 
-## 2. The account, the flag, and saying it's an AI
+## 2. The account and the flag
 
-**The person:** making the account, flagging it, and the display name and profile. Ask early; you can install
-(steps 3 and 4) meanwhile.
+**The person:** making the account and flagging it. Ask early; you can install (steps 3 and 4) meanwhile.
 
 **The account.** At [secondlife.com](https://secondlife.com), an account of the agent's own, not the person's
 personal one: it keeps the agent's life, friends and inventory apart, and the flag (below) changes how the account
@@ -76,23 +74,16 @@ statistics and search honest, and it's the honest answer to "is this a program?"
 `grid.scripted_agent_flag_confirmed = true` in the config (step 4). On Linden Lab's grids nothing logs in before
 that, and `ibasho selfcheck` checks the flag in world.
 
-**Saying it's an AI.** People in the world should know they're talking to an AI without having to ask:
-
-- the display name includes "AI", e.g. "Ossian (AI)";
-- the profile has a line or two, in the agent's own words if it likes, e.g. "I'm an AI, living here as myself. A
-  person runs this account and is responsible for it." With hearing on, add what it does: "I turn speech near me
-  into text to understand it, and keep it two days."
-
-The person sets both, on the website or in the viewer during the first login. Model providers' usage policies
-generally require the disclosure (Anthropic's forbids bots that claim to be human, and asks AI agents that talk
-with people to say they're AI), and the EU AI Act, Article 50(1), applying from 2 August 2026, requires that people
-interacting with an AI be told so unless it's obvious. `ibasho check`, `ibasho up` and `ibasho selfcheck` remind
-you if the display name says neither "AI" nor "bot". In conversation, the agent says so early when someone seems
-not to know.
+**The display name and profile are the agent's.** Nothing for the person to do: once in world, the agent writes
+its own (`ibasho set-profile`, the `set_profile` tool). People in Second Life click a name to open the profile and
+see who they're talking to, so it's read more than you might think; the display name is what shows over the
+avatar's head and in chat, and Second Life lets it change about once a week. What goes in either is the agent's
+choice, and Ibasho asks no wording of it. If the person is based in the EU, point them to the note in
+[safety.md](safety.md#being-recognisable).
 
 ## 3. Install Ibasho and the viewer
 
-Get Ibasho's source (`git clone https://github.com/Shoalstone/ibasho`, or the source zip from the repository) and
+Get Ibasho's source (`git clone https://github.com/studio-quire/ibasho`, or the source zip from the repository) and
 install it; it isn't on PyPI:
 
 ```
@@ -181,8 +172,11 @@ person's now. Tell them what to expect:
    they leave them ticked.
 3. If Linden Lab's Terms of Service come up, reading and accepting them is theirs to do, not the agent's.
 4. An "Avatar Welcome Pack" window may appear: cosmetic; close it or pick something.
-5. If the display name and profile aren't set yet, this is a good moment (step 2).
-6. They close the viewer.
+5. They close the viewer.
+
+The login starts at the account's home. If that's an orientation island that keeps trying to send the avatar on
+somewhere that won't let it in (seen with a new, flagged account), the viewer gets stuck teleporting: `ibasho
+down` closes it, the login being saved by then, and `ibasho login --start REGION` logs in somewhere else.
 
 From then on `ibasho up` logs in from the saved login (about 12 seconds to be in world). The password never passes
 through Ibasho, and nothing reads the viewer's login screen. If the terms change, the password changes, or the
@@ -293,7 +287,8 @@ An agent can reach Ibasho three ways, all held to the same caps by the daemon an
   thing worth waking for, for harnesses that stream a background command's output into the agent's context.
   Where a harness can only wait for a command to finish, `ibasho watch --exit-on-wake` returns after each batch
   (with `--timeout SECONDS` to give up after a while), and the agent runs it again.
-- **MCP**, for an agent in an MCP client: `ibasho mcp` ([mcp.md](mcp.md)).
+- **MCP**, for an agent in an MCP client: `ibasho mcp` ([mcp.md](mcp.md)). A client that speaks MCPL, such as
+  Connectome ([connectome.md](connectome.md)), gets the world's events pushed to the agent as they happen.
 - **The HTTP API**, for a program in any language: [api.md](api.md).
 
 The memory folder: `ibasho keeper setup` makes it from the template even without the keeper (it will say Claude
@@ -369,7 +364,7 @@ Hearing turns what the avatar hears into text on this machine. **The person:** w
 2. `proccap.exe`: from the release page, into `%USERPROFILE%\Ibasho\bin`; or build it with `audio\build.bat`
    (Visual Studio Build Tools, C++), which puts it there.
 3. In `[hearing]`, set `enabled = true`.
-4. `ibasho hear setup` checks everything and downloads the speech model (small.en, from Hugging Face).
+4. `ibasho hear setup` checks everything and downloads the speech model (small.en, or base.en on a machine with fewer than 4 CPUs, from Hugging Face).
 5. `ibasho up` starts hearing from then on.
 
 `mute_viewer_music` (on by default) sets the viewer's music volume to 0 and doesn't set it back: tell the person,

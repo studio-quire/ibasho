@@ -308,7 +308,7 @@ Some ops have their arguments checked too:
 
 | pump | ops |
 |---|---|
-| `IbashoAgent` | everything but the window controls: `balance`, `pay`, `give`, `attach`, `detach`, `attachPoints`, `offerFriendship`, `offerTeleport`, `requestTeleport`, `joinGroup`, `leaveGroup`, `activateGroup`, `setHome`, `parcel`, `people`, `friends`, `names`, `upload`, `uploadMesh`, `wearables`, `createWearable`, `editWearable`, `rebake`, `move`, `stop`, `probeGround`, `messages`; and, for viewers that have them, `findAvatars` (a name of up to 64 characters on one line), `profile` (an avatar's id), `readNotecard` (an inventory item's id) and `findRegion` (a region's name, as for `requestTeleport`). Not `spectator`, `renderUI`, `streamUI`, `hideAvatars`, `getHidden`: the window and what it shows are the person's |
+| `IbashoAgent` | everything but the window controls: `balance`, `pay`, `give`, `attach`, `detach`, `attachPoints`, `offerFriendship`, `offerTeleport`, `requestTeleport`, `joinGroup`, `leaveGroup`, `activateGroup`, `setHome`, `parcel`, `people`, `friends`, `names`, `upload`, `uploadMesh`, `wearables`, `createWearable`, `editWearable`, `rebake`, `move`, `stop`, `probeGround`, `messages`; and, for viewers that have them, `findAvatars` (a name of up to 64 characters on one line), `profile` (an avatar's id), `readNotecard` (an inventory item's id), `findRegion` (a region's name, as for `requestTeleport`), and `setProfile` and `setDisplayName` (the agent's own, whatever it writes: only the types are checked). Not `spectator`, `renderUI`, `streamUI`, `hideAvatars`, `getHidden`: the window and what it shows are the person's |
 | `IbashoIM`, `IbashoObjects`, `IbashoBuild` | all their ops |
 | `LLAgent` | all its ops (sitting, standing, touching, the autopilot, the camera, animations, the lists of what's near); `requestTeleport` only with a region's name (none of `/ \ : ? # % &`) and numbers |
 | `LLAppearance`, `LLInventory`, `LLGesture` | all their ops |
@@ -456,6 +456,8 @@ something (`src/ibasho/cli/`). A few, roughly:
 | `ibasho say TEXT` | `/cmd` `LLChatBar sendChat {message, channel, type}`, `wait: false` |
 | `ibasho im WHO TEXT` | `/cmd` `IbashoIM send {to \| group_id \| session_id, message}`. Someone not near, known or recent is looked up by username: `IbashoAgent findAvatars {name}` where the viewer has it, else a script in a temporary prim (`IbashoBuild create`, the script editor, `llRequestUserKey`) |
 | `ibasho friend WHO`, `ibasho profile WHO` | `IbashoAgent offerFriendship {to, message}`; `IbashoAgent names`, `friends` and, where the viewer has it, `profile {id}` |
+| `ibasho set-profile` | `IbashoAgent setProfile {about?, image_id?}` (a texture's asset id, found with `LLInventory getItemsInfo` from an item), `IbashoAgent setDisplayName {name}` |
+| `ibasho outfit [NAME]` | `LLAppearance getOutfitsList`, `wearOutfit {folder_id \| folder_name, append}` |
 | `ibasho notecard NAME` | `LLInventory getBasicFolderID`, `getItemsInfo` and `collectDescendantsIf` to find it, then `IbashoAgent readNotecard {item_id}`; on viewers without that op, a reader script in one of the agent's objects (`--host`) |
 | `ibasho sky WHICH` | `UI call {function: "World.EnvSettings", parameter}` (midday is `noon` there) |
 | `ibasho ims`, `ibasho im-log` | `IbashoIM sessions`; `IbashoIM history {session_id, count}`, then `markRead` |

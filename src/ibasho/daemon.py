@@ -59,6 +59,9 @@ NOT_TRANSCRIPTS = {"chat.txt", "teleport_history.txt"}
 MESSAGE_REFUSALS = {"chat line", "IM"}   # `refused` events from the viewer's own daily message cap
 # The viewer drops an `LLChatBar sendChat` that comes within a second of the previous one, without a word.
 CHAT_GAP_S = 1.2
+# The viewer pairs new objects with create requests in the order they arrive, which the region doesn't keep: requests
+# made together got each other's shape and colour on Second Life (2026-11-03). One at a time, each waits for its object.
+CREATE_OPS = {("IbashoBuild", "create"), ("IbashoBuild", "rez"), ("IbashoBuild", "duplicate")}
 # Settings held where they're safe whatever happened before: pages the built-in browser opens from files may
 # read other files (the Ibasho viewer refuses file: pages anyway; this is for any viewer, and stays saved).
 FORCED_SETTINGS = (("BrowserFileAccessFromFileUrls", False),)
@@ -141,6 +144,7 @@ class Daemon:
         self.listening: set[str] = set()
         self.obj_ims: collections.deque = collections.deque(maxlen=20)
         self.chat_lock = asyncio.Lock()
+        self.create_lock = asyncio.Lock()
         self.last_chat = 0.0
         self.editor = EditorClient(cfg.editor_port,
                                    lambda m, p: self.events.append("editor", {"method": m, "params": to_jsonable(p)}),
@@ -315,12 +319,29 @@ class Daemon:
             self.ledger.new_session(f"{peer.viewer_pid}:{self.self_id}")
             await self.sync_messages()
             await self.cap_maturity(peer)
+            await self.apply_server_settings(peer)
             if self.ibasho and not self.cfg.viewer_chat_logs:
                 for key, value in (("LogNearbyChat", False), ("KeepConversationLogTranscripts", 0)):
                     await peer.send("LLViewerControl", {"op": "set", "group": "PerAccount", "key": key, "value": value})
             self.events.append("daemon", {"msg": "in world", "id": self.self_id, **self.self_names})
         except Exception:
             log.exception("after-login setup failed")
+
+    async def apply_server_settings(self, peer: LeapPeer):
+        """[server]: settings for drawing without a graphics card, set once in world, after the viewer's graphics
+        presets (which override several of them given on the command line) have had their say."""
+        s = self.cfg.server
+        if not s.enabled:
+            return
+        settings = [("RenderFarClip", float(s.draw_distance)), ("RenderMaxTextureResolution", s.max_texture_size),
+                    ("RenderAvatarMaxNonImpostors", s.avatar_impostors),
+                    ("RenderAvatarMaxComplexity", s.avatar_max_complexity)]
+        if self.ibasho:
+            settings += [("IbashoMaxFPS", float(s.max_fps)), ("IbashoIdleFPS", float(s.idle_fps)),
+                         ("IbashoIdleAfter", float(s.idle_after)), ("IbashoTextureBudget", s.texture_budget_mb),
+                         ("IbashoTrimMemory", float(s.trim_memory))]   # viewers before 0.2 just don't have it
+        for key, value in settings:
+            await peer.send("LLViewerControl", {"op": "set", "group": "Global", "key": key, "value": value})
 
     async def sync_messages(self):
         """Take the Ibasho viewer's own count of today's messages if it's higher than ours: it also saw what went
@@ -598,6 +619,12 @@ def make_app(d: Daemon) -> web.Application:
                 v.data = stage_upload(data["op"], v.data, d.policy.readable, uploads)
             except (StageError, OSError) as e:
                 return json_error(403, f"{pump} {data['op']}: {e}", refused=True, rule="files", retry_after=0)
+        if (pump, data.get("op")) in CREATE_OPS and b.get("wait", True):
+            async with d.create_lock:
+                return await run_cmd(pump, data, v, b, timeout)
+        return await run_cmd(pump, data, v, b, timeout)
+
+    async def run_cmd(pump, data, v, b, timeout):
         peer = d.peer
         if peer is None:
             return json_error(503, "viewer not connected")
@@ -631,6 +658,13 @@ def make_app(d: Daemon) -> web.Application:
         if (pump, data.get("op")) in (("IbashoAgent", "upload"), ("IbashoAgent", "uploadMesh")) and isinstance(reply, dict):
             if reply.get("charged") and isinstance(reply.get("cost"), int):
                 d.policy.charged(reply["cost"])
+        if (pump, data.get("op")) == ("IbashoAgent", "setDisplayName") and isinstance(reply, dict) \
+                and not reply.get("error") and reply.get("display_name"):
+            d.self_names["display_name"] = str(reply["display_name"])   # what my name is in chat from now on
+            log.info("display name set: %s", reply["display_name"])
+        if (pump, data.get("op")) == ("IbashoAgent", "setProfile") and isinstance(reply, dict) \
+                and not reply.get("error"):
+            log.info("profile set: %s", ", ".join(k for k in ("about", "image_id") if k in data))
         return web.json_response(to_jsonable(reply))
 
     @routes.post("/listen")

@@ -46,6 +46,7 @@ def test_spawned_programs_are_asked_not_to_activate(tmp_path):
     assert out.read_text().split() == ["1", str(procs.SW_SHOWNOACTIVATE)]
 
 
+@windows_only
 def test_the_agents_viewer_is_told_never_to_activate(home, monkeypatch):
     exe = home / "viewer" / "IbashoViewer.exe"
     exe.parent.mkdir()

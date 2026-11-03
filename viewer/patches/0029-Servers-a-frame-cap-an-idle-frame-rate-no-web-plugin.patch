@@ -1,0 +1,473 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Mon, 2 Nov 2026 11:53:40 +0000
+Subject: [PATCH 29/35] Servers: a frame cap, an idle frame rate, no web
+ plugin, a texture budget
+
+For running without a graphics card, where Mesa's llvmpipe draws in
+software and takes every core it's given. Each is a setting, off by
+default; Ibasho's tools set them on servers.
+
+- IbashoMaxFPS caps the frame rate. IbashoIdleFPS is a lower cap while no
+  LEAP plugin has sent a request for IbashoIdleAfter seconds (after login,
+  and not while on autopilot or teleporting); the first request after a
+  quiet spell waits up to one idle frame. LLLeap records when the last
+  request came.
+- IbashoNoWebPlugin: no CEF plugin starts (web pages, web floaters, web
+  media on prims), and the web floaters aren't preloaded. Measured on a
+  2-CPU container: about 0.55 GB less memory and 30% more frames.
+- IbashoTextureBudget: the texture budget in MB, held as given. The
+  viewer's own budget comes from the reported video memory, which llvmpipe
+  reports as the system's RAM, and has a 768 MB floor.
+---
+ doc/IBASHO-CHANGES.txt                  | 33 ++++++----
+ indra/llcommon/llleap.cpp               |  8 +++
+ indra/llcommon/llleap.h                 |  6 ++
+ indra/newview/CMakeLists.txt            |  1 +
+ indra/newview/app_settings/settings.xml | 57 ++++++++++++++++-
+ indra/newview/ibashohooks.h             |  8 +++
+ indra/newview/ibashoserver.cpp          | 85 +++++++++++++++++++++++++
+ indra/newview/llappviewer.cpp           |  9 ++-
+ indra/newview/llviewermedia.cpp         | 10 ++-
+ indra/newview/llviewertexture.cpp       |  8 +++
+ indra/newview/llviewerwindow.cpp        |  7 +-
+ 11 files changed, 212 insertions(+), 20 deletions(-)
+ create mode 100644 indra/newview/ibashoserver.cpp
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+index 71f4f71..9548dbe 100644
+--- a/doc/IBASHO-CHANGES.txt
++++ b/doc/IBASHO-CHANGES.txt
+@@ -9,6 +9,12 @@ LGPL headers.
+ 
+ doc/LICENSE-logos.txt
+     Modified for Ibasho (2026-10-22, 2026-10-23): a section recording the replaced artwork.
++indra/llcommon/llleap.cpp
++    Modified for Ibasho (2026-11-02): records when a LEAP plugin last sent a request (for Ibasho's
++    idle frame rate).
++indra/llcommon/llleap.h
++    Modified for Ibasho (2026-11-02): LLLeap::lastRequestSeconds(), when a LEAP plugin last sent a
++    request.
+ indra/llfilesystem/lldir.cpp
+     Modified for Ibasho (2026-10-22): the cache folder is named after the app (Ibasho) instead of
+     SecondLife.
+@@ -31,11 +37,12 @@ indra/newview/CMakeLists.txt
+ indra/newview/VIEWER_VERSION.txt
+     Modified for Ibasho (2026-10-22): Ibasho's own version number (a data file read by CMake).
+ indra/newview/app_settings/settings.xml
+-    Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02): settings for the Ibasho
+-    LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost,
++    Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02): settings for
++    the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost,
+     IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy,
+-    IbashoAllowCurrencyBuy); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release
+-    notes pop up (UpdaterShowReleaseNotes).
++    IbashoAllowCurrencyBuy) and for running on servers (IbashoMaxFPS, IbashoIdleFPS,
++    IbashoIdleAfter, IbashoNoWebPlugin, IbashoTextureBudget); Report Bug goes to Ibasho's issue
++    tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes).
+ indra/newview/app_settings/settings_per_account.xml
+     Modified for Ibasho (2026-10-22): chat and IM transcripts off by default (LogNearbyChat,
+     KeepConversationLogTranscripts).
+@@ -74,9 +81,10 @@ indra/newview/licenses-win32.txt
+     Logitech LCD SDK, FSI FontShop's Meta fonts, glh, Kakadu's JPEG2000, xmlrpc-epi, google-
+     perftools) and OpenJPEG's license added (a data file, packaged as licenses.txt).
+ indra/newview/llappviewer.cpp
+-    Modified for Ibasho (2026-10-22, 2026-10-23): the app folder is named Ibasho; the splash text
+-    uses the app name; no update checks with Linden Lab's update service; no LibVLC; the window
+-    never takes focus by itself (IbashoNoActivate, set up before the splash).
++    Modified for Ibasho (2026-10-22, 2026-10-23, 2026-11-02): the app folder is named Ibasho; the
++    splash text uses the app name; no update checks with Linden Lab's update service; no LibVLC; the
++    window never takes focus by itself (IbashoNoActivate, set up before the splash); a hook for the
++    frame rate cap (IbashoMaxFPS, IbashoIdleFPS).
+ indra/newview/llappviewer.h
+     Modified for Ibasho (2026-10-22): the window class is Ibasho's own.
+ indra/newview/llappviewerwin32.cpp
+@@ -129,8 +137,9 @@ indra/newview/llversioninfo.cpp
+     Modified for Ibasho (2026-10-23): the Ibasho channel counts as a release channel (normal menu
+     bar colour).
+ indra/newview/llviewermedia.cpp
+-    Modified for Ibasho (2026-10-23): the built-in browser refuses files and pages on this machine
+-    or its network before the MIME type probe asks for them.
++    Modified for Ibasho (2026-10-23, 2026-11-02): the built-in browser refuses files and pages on
++    this machine or its network before the MIME type probe asks for them; no web plugin at all when
++    IbashoNoWebPlugin is on.
+ indra/newview/llviewermessage.cpp
+     Modified for Ibasho (2026-10-10, 2026-10-22): hook: balance replies are posted to
+     IbashoEvents; payments within the spending caps.
+@@ -139,9 +148,11 @@ indra/newview/llviewerobjectlist.cpp
+ indra/newview/llviewerparcelmgr.cpp
+     Modified for Ibasho (2026-10-22): land purchases refused unless IbashoAllowLandBuy; parcel
+     passes within the spending caps.
++indra/newview/llviewertexture.cpp
++    Modified for Ibasho (2026-11-02): a texture budget that holds (IbashoTextureBudget).
+ indra/newview/llviewerwindow.cpp
+-    Modified for Ibasho (2026-10-11, 2026-10-22): hook: spectator mode is set up before the
+-    window exists.
++    Modified for Ibasho (2026-10-11, 2026-10-22, 2026-11-02): hook: spectator mode is set up before
++    the window exists; no web floaters preloaded without the web plugin (IbashoNoWebPlugin).
+ indra/newview/llvopartgroup.cpp
+     Modified for Ibasho (2026-10-13, 2026-10-22): hooks that leave chosen avatars out of the
+     window's frames (IbashoAgent hideAvatars).
+diff --git a/indra/llcommon/llleap.cpp b/indra/llcommon/llleap.cpp
+index 1614cc6..accc2e7 100644
+--- a/indra/llcommon/llleap.cpp
++++ b/indra/llcommon/llleap.cpp
+@@ -7,6 +7,9 @@
+  * $LicenseInfo:firstyear=2012&license=viewerlgpl$
+  * Copyright (c) 2012, Linden Research, Inc.
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-11-02): when a LEAP plugin last sent a request (for Ibasho's idle frame
++ * rate). Changes are marked "Ibasho".
+  */
+ 
+ // Precompiled header
+@@ -39,6 +42,10 @@
+ LLLeap::LLLeap() {}
+ LLLeap::~LLLeap() {}
+ 
++// Ibasho: requests arrive on the main thread
++static F64 sIbashoLastRequest = 0;
++F64 LLLeap::lastRequestSeconds() { return sIbashoLastRequest; }
++
+ class LLLeapImpl: public LLLeap
+ {
+     LOG_CLASS(LLLeap);
+@@ -355,6 +362,7 @@ public:
+                     {
+                         // The LLSD object we got from our stream contains the
+                         // keys we need.
++                        sIbashoLastRequest = LLTimer::getTotalSeconds(); // Ibasho
+                         LLEventPumps::instance().obtain(data["pump"]).post(data["data"]);
+                     }
+                     catch (const std::exception& err)
+diff --git a/indra/llcommon/llleap.h b/indra/llcommon/llleap.h
+index acf9edf..a1a4468 100644
+--- a/indra/llcommon/llleap.h
++++ b/indra/llcommon/llleap.h
+@@ -7,6 +7,9 @@
+  * $LicenseInfo:firstyear=2012&license=viewerlgpl$
+  * Copyright (c) 2012, Linden Research, Inc.
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-11-02): when a LEAP plugin last sent a request (for Ibasho's idle frame
++ * rate). Changes are marked "Ibasho".
+  */
+ 
+ #if ! defined(LL_LLLEAP_H)
+@@ -88,6 +91,9 @@ public:
+ 
+     virtual ~LLLeap();
+ 
++    // Ibasho: LLTimer::getTotalSeconds() when any plugin's last request arrived (0: none yet)
++    static F64 lastRequestSeconds();
++
+ protected:
+     LLLeap();
+ };
+diff --git a/indra/newview/CMakeLists.txt b/indra/newview/CMakeLists.txt
+index b602149..87f8c23 100644
+--- a/indra/newview/CMakeLists.txt
++++ b/indra/newview/CMakeLists.txt
+@@ -764,6 +764,7 @@ set(viewer_SOURCE_FILES
+     ibashomesh.cpp
+     ibashomove.cpp
+     ibashoobjects.cpp
++    ibashoserver.cpp
+     # </Ibasho>
+     )
+ 
+diff --git a/indra/newview/app_settings/settings.xml b/indra/newview/app_settings/settings.xml
+index a185602..dee5a89 100644
+--- a/indra/newview/app_settings/settings.xml
++++ b/indra/newview/app_settings/settings.xml
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" ?>
+-<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes). Changes are marked "Ibasho". -->
++<!-- Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02): settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend, IbashoMaxUploadCost, IbashoSpectator, IbashoNoActivate, IbashoMaxMessagesPerDay, IbashoAllowLandBuy, IbashoAllowCurrencyBuy; for servers: IbashoMaxFPS, IbashoIdleFPS, IbashoIdleAfter, IbashoNoWebPlugin, IbashoTextureBudget); Report Bug goes to Ibasho's issue tracker (ReportBugURL); no release notes pop up (UpdaterShowReleaseNotes). Changes are marked "Ibasho". -->
+ <llsd xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:noNamespaceSchemaLocation="llsd.xsd">
+ <map>
+@@ -12015,6 +12015,61 @@
+       <key>Value</key>
+       <integer>50</integer>
+     </map>
++    <key>IbashoMaxFPS</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: the most frames a second the viewer draws; 0 for no cap. For running without a GPU, where drawing takes every core it's given. Not saved.</string>
++      <key>Persist</key>
++      <integer>0</integer>
++      <key>Type</key>
++      <string>F32</string>
++      <key>Value</key>
++      <real>0.0</real>
++    </map>
++    <key>IbashoIdleFPS</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: the most frames a second while no LEAP plugin has sent a request for IbashoIdleAfter seconds, after login, and the avatar isn't on autopilot or teleporting; 0 for no idle cap. The first request after a quiet spell waits up to one idle frame. Not saved.</string>
++      <key>Persist</key>
++      <integer>0</integer>
++      <key>Type</key>
++      <string>F32</string>
++      <key>Value</key>
++      <real>0.0</real>
++    </map>
++    <key>IbashoIdleAfter</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: seconds without a LEAP request before IbashoIdleFPS applies. Not saved.</string>
++      <key>Persist</key>
++      <integer>0</integer>
++      <key>Type</key>
++      <string>F32</string>
++      <key>Value</key>
++      <real>5.0</real>
++    </map>
++    <key>IbashoNoWebPlugin</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: no web (CEF) plugin starts, so no web pages, web floaters or web media on prims, and none are preloaded; music and other media GStreamer plays still work. Set on the command line, before the login screen. Not saved.</string>
++      <key>Persist</key>
++      <integer>0</integer>
++      <key>Type</key>
++      <string>Boolean</string>
++      <key>Value</key>
++      <integer>0</integer>
++    </map>
++    <key>IbashoTextureBudget</key>
++    <map>
++      <key>Comment</key>
++      <string>Ibasho: texture and vertex memory in MB the viewer keeps itself to, discarding detail beyond it; 0 for the viewer's own budget from the reported video memory (with software rendering, that is system memory). Measured the way the viewer measures it, which counts each byte about twice. Not saved.</string>
++      <key>Persist</key>
++      <integer>0</integer>
++      <key>Type</key>
++      <string>U32</string>
++      <key>Value</key>
++      <integer>0</integer>
++    </map>
+     <key>TextureCameraBoost</key>
+     <map>
+       <key>Comment</key>
+diff --git a/indra/newview/ibashohooks.h b/indra/newview/ibashohooks.h
+index cf72c83..7f1217a 100644
+--- a/indra/newview/ibashohooks.h
++++ b/indra/newview/ibashohooks.h
+@@ -86,6 +86,14 @@ namespace ibasho
+     // IbashoAgent findRegion (ibashoagent.cpp): each block of a MapBlockReply, as LLWorldMapMessage reads it.
+     // `map_layer`: the reply is to a map-layer request (a name search is one); an empty name ends a search.
+     void onMapBlock(bool map_layer, const std::string& name, U32 x_world, U32 y_world, U8 access);
++
++    // Running on a server without a GPU (ibashoserver.cpp). At the end of each frame: sleeps as long as
++    // IbashoMaxFPS, or IbashoIdleFPS while no LEAP request has come for IbashoIdleAfter seconds, asks.
++    void limitFrameRate();
++    // false for the CEF (web) plugin when IbashoNoWebPlugin is on; the viewer then preloads no web floaters.
++    bool allowWebPlugin(const std::string& plugin_basename);
++    // IbashoTextureBudget in MB, or 0 for the viewer's own budget from the reported video memory.
++    F32 textureBudgetMB();
+ }
+ 
+ #endif
+diff --git a/indra/newview/ibashoserver.cpp b/indra/newview/ibashoserver.cpp
+new file mode 100644
+index 0000000..d2a7287
+--- /dev/null
++++ b/indra/newview/ibashoserver.cpp
+@@ -0,0 +1,85 @@
++/**
++ * @file   ibashoserver.cpp
++ * @brief  Running on a server without a GPU (Mesa's llvmpipe under a virtual display): a frame rate cap
++ *         with a lower one while no LEAP plugin is asking anything, no web browser plugin, and a
++ *         texture budget that holds. Each is a setting, off by default; Ibasho's tools set them.
++ *         Written by Claude Opus 5.5, 2026-11-02.
++ *
++ * $LicenseInfo:firstyear=2026&license=viewerlgpl$
++ * Ibasho viewer source code: an addition to the Second Life Viewer Source Code
++ * (Linden Research, Inc.), written for Ibasho by Claude (Anthropic) models.
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation;
++ * version 2.1 of the License only.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
++ * $/LicenseInfo$
++ */
++
++#include "llviewerprecompiledheaders.h"
++#include "ibashohooks.h"
++
++#include "llagent.h"
++#include "llleap.h"
++#include "llstartup.h"
++#include "lltimer.h"
++#include "llviewercontrol.h"
++
++namespace ibasho
++{
++
++void limitFrameRate()
++{
++    // Software rendering takes every core it's given, so a frame rate cap is what leaves the machine's CPU to
++    // the agent's other work. While nothing has asked the viewer anything for a while (and it isn't walking
++    // or teleporting), the idle rate applies: the first request after a quiet spell waits up to one idle
++    // frame, and the ones after it run at the full rate.
++    static LLCachedControl<F32> max_fps(gSavedSettings, "IbashoMaxFPS", 0.f);
++    static LLCachedControl<F32> idle_fps(gSavedSettings, "IbashoIdleFPS", 0.f);
++    static LLCachedControl<F32> idle_after(gSavedSettings, "IbashoIdleAfter", 5.f);
++    static F64 last_frame_end = 0;
++
++    F64 now = LLTimer::getTotalSeconds();
++    F32 fps = max_fps;
++    if (idle_fps > 0.f && (fps <= 0.f || idle_fps < fps)
++        && LLStartUp::getStartupState() == STATE_STARTED
++        && now - LLLeap::lastRequestSeconds() > idle_after
++        && !gAgent.getAutoPilot()
++        && gAgent.getTeleportState() == LLAgent::TELEPORT_NONE)
++    {
++        fps = idle_fps;
++    }
++    if (fps > 0.f && last_frame_end > 0)
++    {
++        F64 wait = 1.0 / llmax(fps, 0.1f) - (now - last_frame_end);
++        if (wait > 0.001)
++        {
++            ms_sleep((U32)(wait * 1000.0));
++        }
++    }
++    last_frame_end = LLTimer::getTotalSeconds();
++}
++
++bool allowWebPlugin(const std::string& plugin_basename)
++{
++    // The CEF plugin starts Chromium processes (about half a GB, and a third of the frame rate under
++    // software rendering); an agent on a server has little use for the viewer's web pages.
++    return plugin_basename != "media_plugin_cef" || !gSavedSettings.getBOOL("IbashoNoWebPlugin");
++}
++
++F32 textureBudgetMB()
++{
++    static LLCachedControl<U32> budget(gSavedSettings, "IbashoTextureBudget", 0);
++    return (F32)(U32)budget;
++}
++
++}
+diff --git a/indra/newview/llappviewer.cpp b/indra/newview/llappviewer.cpp
+index ca58ea8..fe2b266 100644
+--- a/indra/newview/llappviewer.cpp
++++ b/indra/newview/llappviewer.cpp
+@@ -23,9 +23,10 @@
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
+  *
+- * Modified for Ibasho (2026-10-22, 2026-10-23): the app folder is named Ibasho; the splash text uses
+- * the app name; no update checks with Linden Lab's update service; no LibVLC; the window never takes
+- * focus by itself (IbashoNoActivate, set up before the splash). Changes are marked "Ibasho".
++ * Modified for Ibasho (2026-10-22, 2026-10-23, 2026-11-02): the app folder is named Ibasho; the splash
++ * text uses the app name; no update checks with Linden Lab's update service; no LibVLC; the window never
++ * takes focus by itself (IbashoNoActivate, set up before the splash); a hook for the frame rate cap
++ * (IbashoMaxFPS, IbashoIdleFPS). Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+@@ -1568,6 +1569,8 @@ bool LLAppViewer::doFrame()
+                 }
+             }
+ 
++            ibasho::limitFrameRate(); // Ibasho
++
+             if (mRandomizeFramerate)
+             {
+                 ms_sleep(rand() % 200);
+diff --git a/indra/newview/llviewermedia.cpp b/indra/newview/llviewermedia.cpp
+index ba653b6..87b2eba 100644
+--- a/indra/newview/llviewermedia.cpp
++++ b/indra/newview/llviewermedia.cpp
+@@ -23,8 +23,9 @@
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
+  *
+- * Modified for Ibasho (2026-10-23): the built-in browser refuses files and pages on this machine or its
+- * network before the MIME type probe asks for them. Changes are marked "Ibasho".
++ * Modified for Ibasho (2026-10-23, 2026-11-02): the built-in browser refuses files and pages on this
++ * machine or its network before the MIME type probe asks for them; no web plugin at all when
++ * IbashoNoWebPlugin is on. Changes are marked "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+@@ -1780,6 +1781,11 @@ LLPluginClassMedia* LLViewerMediaImpl::newSourceFromMediaType(std::string media_
+ 
+     std::string plugin_basename = LLMIMETypes::implType(media_type);
+     LLPluginClassMedia* media_source = NULL;
++    if (!ibasho::allowWebPlugin(plugin_basename))
++    {
++        LL_INFOS_ONCE("Media") << "No web plugin (IbashoNoWebPlugin)" << LL_ENDL; // Ibasho
++        return NULL;
++    }
+ 
+     // HACK: we always try to keep a spare running webkit plugin around to improve launch times.
+     // If a spare was already created before PluginAttachDebuggerToPlugins was set, don't use it.
+diff --git a/indra/newview/llviewertexture.cpp b/indra/newview/llviewertexture.cpp
+index 6e05555..0f0d221 100644
+--- a/indra/newview/llviewertexture.cpp
++++ b/indra/newview/llviewertexture.cpp
+@@ -23,11 +23,15 @@
+  *
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
++ *
++ * Modified for Ibasho (2026-11-02): a texture budget that holds (IbashoTextureBudget). Changes are marked
++ * "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+ 
+ #include "llviewertexture.h"
++#include "ibashohooks.h" // Ibasho
+ 
+ // Library includes
+ #include "llmath.h"
+@@ -519,6 +523,10 @@ void LLViewerTexture::updateClass()
+     // can negatively impact performance, so leave 20% of a breathing room for
+     // 'bias' calculation to kick in.
+     F32 target = llmax(llmin(budget - 512.f, budget * 0.8f), MIN_VRAM_BUDGET);
++    if (ibasho::textureBudgetMB() > 0.f)
++    {
++        target = ibasho::textureBudgetMB(); // Ibasho: the whole budget, with no floor (IbashoTextureBudget)
++    }
+     sFreeVRAMMegabytes = target - used;
+ 
+     F32 over_pct = (used - target) / target;
+diff --git a/indra/newview/llviewerwindow.cpp b/indra/newview/llviewerwindow.cpp
+index ebb5dfb..d94234d 100644
+--- a/indra/newview/llviewerwindow.cpp
++++ b/indra/newview/llviewerwindow.cpp
+@@ -23,8 +23,9 @@
+  * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+  * $/LicenseInfo$
+  *
+- * Modified for Ibasho (2026-10-11, 2026-10-22): hook: spectator mode is set up before the window
+- * exists. Changes are marked "Ibasho".
++ * Modified for Ibasho (2026-10-11, 2026-10-22, 2026-11-02): hook: spectator mode is set up before the
++ * window exists; no web floaters preloaded without the web plugin (IbashoNoWebPlugin). Changes are marked
++ * "Ibasho".
+  */
+ 
+ #include "llviewerprecompiledheaders.h"
+@@ -2482,7 +2483,7 @@ void LLViewerWindow::initWorldUI()
+         physical_mem = LLMemory::getMaxMemKB();
+     }
+ 
+-    if (!gNonInteractive)
++    if (!gNonInteractive && ibasho::allowWebPlugin("media_plugin_cef")) // Ibasho
+     {
+         if (physical_mem > MIN_PHYSICAL_MEMORY)
+         {

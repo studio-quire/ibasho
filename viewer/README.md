@@ -7,7 +7,7 @@ spectator mode so a person can watch the window without their mouse and keyboard
 
 **This software is not provided or supported by Linden Lab, the makers of Second Life.** Ibasho itself comes
 without support either: Help > Report Bug opens this project's issue tracker, where reports are welcome, but
-nobody promises an answer or a fix. Windows only.
+nobody promises an answer or a fix. Windows, and Linux (x86-64; made for servers without a graphics card, [docs/linux.md](../docs/linux.md)).
 
 It is Linden Lab's open-source viewer ([secondlife/viewer](https://github.com/secondlife/viewer), `develop` at
 the commit in [`BASE`](BASE), `81bc977`, viewer 26.4.0) with the patch series in [`patches/`](patches). Most
@@ -56,11 +56,26 @@ ships for the profile's path, your user name and the computer's name, and refuse
 entries carry their times in UTC (a zip stores times without a zone, so local times would give away the
 builder's).
 
+### On Linux
+
+    docker build -t ibasho-viewer-build viewer/linux
+    docker run --rm -v ibasho-viewer-work:/work -v "$PWD:/release:ro" -e IBASHO_VIEWER_WORK=/work \
+        ibasho-viewer-build bash /release/viewer/build-linux.sh
+
+`build-linux.sh` does what setup, configure, build and package do on Windows, in one go: on Ubuntu 22.04 (as Linden
+Lab builds its Linux viewer) or in that container, into `IBASHO_VIEWER_WORK`. It needs about 10 GB (the compiler
+writes no debug information unless `IBASHO_DEBUG_INFO=1`) and an hour or two on 4 cores; run again, it builds only
+what changed. The result is `dist/Ibasho-<version>-linux-x86_64.tar.xz`: `ibasho-viewer` starts it,
+`bin/ibasho-viewer-bin` is the viewer. Linden Lab's desktop integration (menu entries, the `secondlife://`
+handler, its installer) is left out, since it would install the viewer as "Second Life". `package.py` checks the
+tarball for the builder's home folder, user and computer name, as it does the zip (`IBASHO_FORBIDDEN_NAMES` adds
+names, for a container build made for some machine). `.github/workflows/viewer-linux.yml` builds the same in GitHub Actions.
+
 ### Version
 
-Ibasho numbers its releases itself: `indra/newview/VIEWER_VERSION.txt` holds MAJOR.MINOR.PATCH (`0.1.0`), and
+Ibasho numbers its releases itself: `indra/newview/VIEWER_VERSION.txt` holds MAJOR.MINOR.PATCH (`0.2.0`), and
 `configure.sh` sets the fourth part, the build number, to the number of commits in the Ibasho series on top
-of `BASE` (25 for the first release, so `0.1.0.25`). Every change to the series, published or local, gives a
+of `BASE` (25 for the first release, `0.1.0.25`; 35 for `0.2.0.35`). Every change to the series, published or local, gives a
 different version, and the channel name "Ibasho" tells it apart from any Linden Lab viewer. Linden Lab's own
 version of the base (26.4.0) is named in About. Re-run `configure.sh` before a release build so the number is
 current; `build.ps1` warns if the tree has moved on since.
@@ -150,6 +165,20 @@ boundary: whatever can drive the viewer can also change the settings.
 The viewer's own chat and IM transcripts are off by default (`LogNearbyChat`, `KeepConversationLogTranscripts`),
 so other people's words aren't written to disk unless the person running it turns them on.
 
+### On a server
+
+For servers without a graphics card, where Mesa draws in software and takes every core it's given. Not saved;
+Ibasho sets them on the command line or over LEAP ([docs/linux.md](../docs/linux.md#server-settings)):
+
+| Setting | Default | |
+|---|---|---|
+| `IbashoMaxFPS` | 0 | frames a second at most; 0 = no cap |
+| `IbashoIdleFPS` | 0 | the cap while no LEAP plugin has sent a request for `IbashoIdleAfter` seconds (after login, not on autopilot or teleporting); the first request after a quiet spell waits up to one idle frame |
+| `IbashoIdleAfter` | 5 | seconds |
+| `IbashoNoWebPlugin` | off | no web (CEF) plugin starts and no web floaters are preloaded; set it on the command line |
+| `IbashoTextureBudget` | 0 | the texture budget in MB, held as given; 0 = the viewer's own, from the video memory, which software rendering reports as all of the system's |
+| `IbashoTrimMemory` | 0 | Linux: every this many seconds, memory the viewer has freed goes back to the system (`malloc_trim`), so it shrinks again after a busy place; 0 = never |
+
 ### The built-in browser
 
 The web and media windows, media on prims and parcels, and parcel music all load through the built-in browser
@@ -227,7 +256,8 @@ Create and change objects one by one with the messages the build tools send, no 
 - `create {shape=box, pos?, scale=[.5,.5,.5], rot? | rot_euler?, ...modify keys}` -> `{id, local_id}` once the
   region has made it (up to 15 s). Default position 2 m ahead.
 - `modify {id | ids, ...}`. Keys: `pos` (region; on a root it moves the linkset), `local_pos` (a child,
-  relative to its root, in the root's frame), `rot` [x,y,z,w] or `rot_euler` [degrees], `local_rot(_euler)`,
+  relative to its root, in the root's frame; rotation and scale each go with the prim's position, as Linden
+  Lab's build tools send them), `rot` [x,y,z,w] or `rot_euler` [degrees], `local_rot(_euler)`,
   `scale`; `shape` (box cylinder prism sphere torus tube ring cone pyramid; resets the shape parameters),
   `profile_cut [b,e]`, `path_cut [b,e]`, `hollow`, `twist [b,e]`, `taper [x,y]` (as the edit panel means
   it), `top_shear`, `hole_size`, `radius_offset`, `revolutions`, `skew`; per `face` (default all): `color
@@ -260,9 +290,11 @@ Money, giving, attachments, offers, groups, places and people:
   with `LLNotifications respond`), `activateGroup {group_id}`
 - `setHome`; `parcel` -> `{region {name, id, maturity, sandbox}, parcel {name, desc, local_id, owner_id,
   group_id, group_owned, area, category, music_url, media_url, for_sale, sale_price, allowed: [build scripts
-  fly push damage voice see_avatars]}}`
-- `people {dist=64}` -> `{people: [{id, display_name, username, pos, dist, friend}]}`, nearest first (avatars
-  further away have coarse positions).
+  fly push damage voice see_avatars]}, my_voice}`: `my_voice` is whether your own voice chat is on (not
+  whether this parcel's channel has connected)
+- `people {dist=64}` -> `{people: [{id, display_name, username, pos, dist, friend, in_voice?, speaking?}]}`,
+  nearest first (avatars further away have coarse positions). While your voice chat is on, `in_voice`
+  marks those in it and `speaking` those talking now.
 - `friends` -> `{friends: [{id, display_name, username, online, rights_to, rights_from}]}`
 - `names {ids, timeout=5}` -> `{names: {id: {display_name, username}}}`
 - `findAvatars {name, limit=20, timeout=10}` -> `{avatars: [{id, username, display_name}]}`: a name search as
@@ -277,7 +309,16 @@ Money, giving, attachments, offers, groups, places and people:
   Employee or a special caption; `online` as far as the grid shows you; `identified` / `transacted`: payment
   info on file / used; `notes` are your own private notes on them. Through the region's `AgentProfile`
   capability; without it (OpenSim) the older messages, where groups or picks may not come (then `partial`).
-  `{error}` if no profile comes in time.
+  `{error}` if no profile comes in time. Your own adds `display_name_next_change` while a display name change
+  has to wait.
+- `setProfile {about?, image_id?, timeout=20}` -> `{}` once the grid has taken them: your own about text and
+  picture (a texture's asset id), as the profile window saves them, through the `AgentProfile` capability.
+  Without it (OpenSim) the older update message, made from your current profile with only these fields
+  changed; it has no answer, so the reply (`by_message: true`) comes once it's sent.
+- `setDisplayName {name, timeout=30}` -> `{display_name, next_change?}` once the grid has answered: as the
+  display name window sets it; `""` or your username goes back to the username; at most 31 characters. Second
+  Life allows about one change a week: too soon, `{error, next_change}` says when. Others see the new name
+  within a few minutes. Grids without display names (OpenSim) say so.
 - `readNotecard {item_id, timeout=20}` -> `{item_id, name, text, items: [{name, type}], truncated?}`: a notecard
   in your inventory (given to you, say), read as the notecard window reads it, wherever you are: only with copy
   permission, like the window. Items embedded in the text show in it as `[type: name]` and are listed in
@@ -427,13 +468,16 @@ Each changed file says so in its header (what, and when) and marks the changed l
 | `llpanellogin.cpp`, `panel_login.xml` | the viewer's name and version on the login screen |
 | `strings.xml` (en; translations drop their overrides), `floater_about.xml` (likewise) | the app name "Ibasho"; About credits Linden Lab's viewer as the base, says who doesn't support it, drops the Havok, Kakadu and Siren14 lines |
 | `res/viewerRes.rc`, `viewer_manifest.py` | the executable `IbashoViewer.exe`, version resources, installer name |
-| `VIEWER_VERSION.txt` | `0.1.0` |
+| `VIEWER_VERSION.txt` | `0.2.0` |
 | `llversioninfo.cpp` | the Ibasho channel counts as a release channel (the menu bar's normal colour) |
 | `llappviewer.cpp`, `settings.xml`, `panel_preferences_setup.xml`, `notifications.xml` (en; translations drop their override), `viewer_manifest.py` | no update checks (Linden Lab's update service isn't asked), no release notes popping up, no update settings, a grid asking for a newer viewer doesn't point to Linden Lab's download; `build_data.json` names Ibasho and no update service |
 | `settings.xml` (`ReportBugURL`), `menu_viewer.xml`, `strings.xml` | Help > Report Bug opens Ibasho's issue tracker; Linden Lab's bug-reporting links gone; freeze and missing-file messages don't send people to Linden Lab's support |
 | `media_plugins/CMakeLists.txt`, `newview/CMakeLists.txt`, `viewer_manifest.py`, `llappviewer.cpp`, `mime_types.xml`, `strings.xml` (all languages) | no LibVLC: not built or packaged; its media types go to CEF; no LibVLC line in About |
 | `licenses-win32.txt`, `scripts/packages-formatter.py` | `licenses.txt` only for what ships (OpenJPEG in, Kakadu and five others out; OpenAL Soft and freealut with where their source is); About > Licenses says Linden Lab's copyright is for the base viewer |
 | icons and logos | `icons/test`, `res/*.ico`, installer icons, the login logos, the system-message badge, the place-link icon, the system folder icons, the map placeholder and the home tab icon are Ibasho's own artwork ([`art/make_art.py`](art/make_art.py)), recorded in `doc/LICENSE-logos.txt`; no image of Linden Lab's marks is left in the build |
+| `newview/CMakeLists.txt`, `viewer_manifest.py`, `licenses-linux.txt`, `linux_tools/ibasho-viewer.sh` | Linux: no LibVLC or example plugin; the package starts with `ibasho-viewer` and has `bin/ibasho-viewer-bin`, without Linden Lab's desktop integration; `licenses.txt` as on Windows, plus SDL3 |
+| `llcommon/llleap.cpp`, `llleap.h`, `llappviewer.cpp`, `llviewermedia.cpp`, `llviewerwindow.cpp`, `llviewertexture.cpp` | servers: when a LEAP plugin last asked something; the frame rate cap and its idle rate; no web plugin and no preloaded web floaters; the texture budget (`ibashoserver.cpp` holds the rest, and gives freed memory back) |
+| `llappviewerlinux.cpp` | Linux: where the disks give no id (a container), the serial number Linden Lab sees comes from an id of the install's own (`install_id` in the settings folder, made at random once) rather than from nothing, which every such install would share |
 
 New files, all under the LGPL 2.1: `ibashohooks.h`, `ibashocommon.{h,cpp}`, `ibashoim.cpp`, `ibashoobjects.cpp`, `ibasholimits.cpp`,
 `ibashoagent.cpp`, `ibashomove.cpp`, `ibashomesh.cpp`, `ibashohide.h`.
@@ -467,6 +511,16 @@ New files, all under the LGPL 2.1: `ibashohooks.h`, `ibashocommon.{h,cpp}`, `iba
 | 23 | IbashoAgent readNotecard and findRegion |
 | 24 | Never take focus: the window appears without activation |
 | 25 | Uploads: a negative max_cost allows no fee |
+| 26 | Linux: no LibVLC there either |
+| 27 | Report Bug: Ibasho's tracker moved to studio-quire |
+| 28 | Linux package: Ibasho's names and licences |
+| 29 | Servers: a frame cap, an idle frame rate, no web plugin, a texture budget |
+| 30 | Linux: an id of the install's own where the disks give none |
+| 31 | IbashoAgent setProfile and setDisplayName |
+| 32 | IbashoBuild modify: rotation and scale go with the position |
+| 33 | Servers: memory given back after a busy place (IbashoTrimMemory) |
+| 34 | IbashoAgent people and parcel: who's in voice and speaking |
+| 35 | Version: Ibasho 0.2.0 |
 
 ## License and trademarks
 

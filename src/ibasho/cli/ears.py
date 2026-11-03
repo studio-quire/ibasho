@@ -125,9 +125,8 @@ def start(ctx: Ctx, model: str | None = None) -> str:
         procs.kill_tree(cur)   # listening to an old viewer, or the config changed
     if importlib.util.find_spec("faster_whisper") is None:
         raise Fail('hearing needs its extra packages: pip install ".[hearing]" in the Ibasho folder')
-    if settings_mod.proccap_path(cfg, h) is None:
-        raise Fail(f"proccap.exe not found: the person builds it with audio\\build.bat (or puts a release's copy in "
-                   f"{cfg.home / 'bin'})")
+    if settings_mod.capture_tool(cfg, h) is None:
+        raise Fail(settings_mod.missing_tool())
     model = model or h.model
     fresh = "" if model_cached(ctx, model) else f"; first it downloads {model} (`ibasho hear setup` does that ahead)"
     from .lifecycle import _src_path
@@ -199,17 +198,29 @@ def setup(ctx: Ctx, a):
     model = a.model or h.model
     ok = True
     print(f"hearing.enabled = {str(h.enabled).lower()}" + ("" if h.enabled else " (set it in the config to use hearing)"))
-    build = tuple(int(x) for x in (platform.version().split(".") + ["0", "0", "0"])[:3] if x.isdigit())
-    if sys.platform != "win32" or build < (10, 0, 19041):
-        print("PROBLEM: capturing one program's sound needs Windows 10 version 2004 or later")
+    if sys.platform == "win32":
+        build = tuple(int(x) for x in (platform.version().split(".") + ["0", "0", "0"])[:3] if x.isdigit())
+        if build < (10, 0, 19041):
+            print("PROBLEM: capturing one program's sound needs Windows 10 version 2004 or later")
+            ok = False
+    tool = settings_mod.capture_tool(cfg, h)
+    if not tool:
         ok = False
-    proccap = settings_mod.proccap_path(cfg, h)
-    if proccap:
-        print(f"proccap: {proccap}")
+        print(f"PROBLEM: {settings_mod.missing_tool()}")
+    elif sys.platform == "win32":
+        print(f"proccap: {tool}")
     else:
-        ok = False
-        print(f"PROBLEM: proccap.exe not found. Build it with audio\\build.bat (Visual Studio Build Tools, as for "
-              f"the viewer); it goes to {cfg.home / 'bin'}")
+        from ..hearing.capture import WORLD_SINK, CaptureError, sink_exists
+        try:
+            if sink_exists(tool, WORLD_SINK):
+                print(f"sound server: the viewer plays on {WORLD_SINK}, which hearing records")
+            else:
+                ok = False
+                print(f"PROBLEM: the sound server has no {WORLD_SINK} sink for the viewer (the container makes it; "
+                      "elsewhere see docs/hearing.md)")
+        except CaptureError as e:
+            ok = False
+            print(f"PROBLEM: {e}")
     if importlib.util.find_spec("faster_whisper") is None:
         print('PROBLEM: the hearing packages aren\'t installed: pip install ".[hearing]" in the Ibasho folder')
         raise SystemExit(1)
@@ -221,10 +232,11 @@ def setup(ctx: Ctx, a):
     warnings.filterwarnings("ignore", module="huggingface_hub")
     from faster_whisper.utils import download_model
     where = settings_mod.models_dir(cfg)
-    print(f"model {model}: " + ("already here" if model_cached(ctx, model) else f"downloading into {where} ..."),
-          flush=True)
+    here = model_cached(ctx, model)
+    print(f"model {model}: " + ("already here" if here else f"downloading into {where} ..."), flush=True)
     try:
-        download_model(model, cache_dir=str(where))
+        if not here:   # a cached model isn't checked online: hearing works without the network
+            download_model(model, cache_dir=str(where))
     except Exception as e:
         ok = False
         print(f"PROBLEM: couldn't get {model}: {e}")
@@ -232,19 +244,22 @@ def setup(ctx: Ctx, a):
         print(f"model {model}: ready ({settings_mod.threads(h)} CPU threads)")
     print("music: " + ("following the parcel's stream (needs the Ibasho viewer)" if h.follow_music else "off"))
     if h.voice_device:
-        if proccap:
+        if tool:
             from ..hearing.capture import CaptureError, find_device, list_devices
             try:
-                d = find_device(list_devices(proccap), h.voice_device)
+                d = find_device(list_devices(tool), h.voice_device)
                 if d.is_default:
                     ok = False
-                    print(f"PROBLEM: voice device {d.name!r} is a Windows default output ({', '.join(d.roles)}); "
+                    print(f"PROBLEM: voice device {d.name!r} is a default output ({', '.join(d.roles)}); "
                           "voice capture refuses it. Choose a spare device (docs/hearing.md)")
                 else:
                     print(f"voice: on, from {d.name!r} (voice chat will play there, not on your speakers)")
             except CaptureError as e:
                 ok = False
                 print(f"PROBLEM: voice device: {e}")
+        if cfg.server.enabled and not cfg.server.voice:
+            print("note: the viewer's voice chat is off on this server ([server] voice), so there's nothing to hear "
+                  "there yet")
     else:
         print("voice: off (opt-in: hearing.voice_device)")
     if not ok:
@@ -253,12 +268,12 @@ def setup(ctx: Ctx, a):
 
 def devices(ctx: Ctx, a):
     h = hearing(ctx)
-    proccap = settings_mod.proccap_path(ctx.cfg, h)
-    if not proccap:
-        raise Fail("proccap.exe not found (audio\\build.bat builds it)")
+    tool = settings_mod.capture_tool(ctx.cfg, h)
+    if not tool:
+        raise Fail(settings_mod.missing_tool())
     from ..hearing.capture import CaptureError, list_devices
     try:
-        devs = list_devices(proccap)
+        devs = list_devices(tool)
     except CaptureError as e:
         raise Fail(str(e)) from None
     want = h.voice_device.lower()

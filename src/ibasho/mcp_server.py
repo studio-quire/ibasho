@@ -10,8 +10,10 @@ No `from __future__ import annotations` here: the SDK reads the tools' annotatio
 """
 
 import argparse
+import contextlib
 import io
 import json
+import os
 import sys
 import threading
 import time
@@ -24,11 +26,23 @@ from .cli.common import Ctx, Fail
 PICTURE_QUALITY = 85     # JPEG for pictures sent inline: a tenth of the PNG's size, and models read them as well
 WAIT_DEFAULT = 50        # under the minute many MCP clients give a tool call by default
 WAIT_MAX = 1800
+# A listen of 300 s ran into Connectome's 300 s answer limit (the one docs/connectome.md sets) on Second Life,
+# 2026-11-03: listens end in time for their answer to arrive
+LISTEN_MAX = 240
 
 INSTRUCTIONS = """\
 Ibasho: you live in the Second Life world through an avatar of your own, in a viewer on this machine.
 Start with `status` (and `up` if you're not in world), then `look`. Between things, call `wait_events`: it blocks
 until something worth answering happens (chat, an IM, a dialog, an offer, a payment) and returns it, one line each.
+Results sometimes name an `ibasho` command or a --flag: the tool and parameter of the same name do the same.
+People, objects and sessions can be given by name, id, or the first few characters of an id."""
+
+# For a host that speaks MCPL, where events may come to the agent by themselves.
+INSTRUCTIONS_LIVE = """\
+Ibasho: you live in the Second Life world through an avatar of your own, in a viewer on this machine.
+Start with `status` (and `up` if you're not in world), then `look`. What happens around you (chat, IMs, dialogs,
+offers, payments) comes to you as it happens, each line marked with where it's from, when your host has Ibasho's
+event feature sets on; when it has them all off, the `wait_events` tool is there to wait for them instead.
 Results sometimes name an `ibasho` command or a --flag: the tool and parameter of the same name do the same.
 People, objects and sessions can be given by name, id, or the first few characters of an id."""
 
@@ -126,11 +140,14 @@ def _with_output(err: str) -> str:
 
 
 def argv(cmd: str, *positional, **flags) -> list[str]:
-    """A command line: flags as --name=value (so values starting with '-' stay values), True as a bare --name,
-    None and False left out, lists as x,y,z; positionals after `--`."""
+    """A command line: flags as --name=value (so values starting with '-' stay values), one-letter ones as -nVALUE,
+    True as a bare --name, None and False left out, lists as x,y,z; positionals after `--`."""
     out = cmd.split()
     for k, v in flags.items():
         if v is None or v is False:
+            continue
+        if len(k) == 1 and v is not True:
+            out.append(f"-{k}{v}")
             continue
         flag = "--" + k.rstrip("_").replace("_", "-")
         if v is True:
@@ -159,12 +176,19 @@ class Waiter:
     """`wait_events`: one hear.Watcher kept for the server's life, so group digests, dialogs already shown and the
     place in the event log carry over from one wait to the next, as they do in a running `ibasho watch`."""
 
-    def __init__(self):
+    def __init__(self, bridge=None):
         self.watcher = None
         self.busy = threading.Lock()
+        self.bridge = bridge   # mcpl.Bridge: with an MCPL host pushing events, there's nothing to wait for here
 
     def wait(self, ctx: Ctx, timeout: float) -> str:
         from .cli.hear import Watcher, unread_line
+        if self.bridge and self.bridge.pushing:
+            self.watcher = None   # the pushes read the events now; a wait after they stop starts from the cursor
+            left = self.bridge.not_pushed()
+            return ("(events come to you by themselves here: your host takes them as MCPL pushes, so there's no "
+                    "need to wait for them. When there's nothing else to do, end your turn, and the world will "
+                    "wake you" + (f"; not pushed: {', '.join(left)}" if left else "") + ")")
         if not self.busy.acquire(blocking=False):
             raise Failed("another wait_events is still running")
         try:
@@ -186,8 +210,9 @@ class Waiter:
 
 # ---------- the server ----------
 
-def build(config: str | None = None):
-    """The MCP server, its tools bound to the config at `config` (default: IBASHO_CONFIG, else IBASHO_HOME's)."""
+def build(config: str | None = None, bridge=None):
+    """The MCP server, its tools bound to the config at `config` (default: IBASHO_CONFIG, else IBASHO_HOME's).
+    `bridge`: the mcpl.Bridge it will be served through, if any."""
     import anyio
     import anyio.to_thread
     from mcp.server.mcpserver import Context, Image, MCPServer
@@ -199,7 +224,7 @@ def build(config: str | None = None):
     from .cli import make
 
     server = MCPServer("ibasho", version=__version__, instructions=INSTRUCTIONS, log_level="WARNING")
-    waiter = Waiter()
+    waiter = Waiter(bridge)
 
     def tool(read_only: bool = False, destructive: bool = False):
         ann = ToolAnnotations(read_only_hint=read_only, destructive_hint=destructive if not read_only else None,
@@ -335,18 +360,26 @@ def build(config: str | None = None):
     async def listen(context: Context, secs: float = WAIT_DEFAULT, settle: float | None = None,
                      speaker: str | None = None, fresh: bool = False):
         """Collect local chat for a while in one result (talks, crowds); stops early on an IM, an offer, or my name.
-        settle: conversation mode, return this many seconds after someone else's first new line. speaker: only
-        speakers matching this regex. fresh: from now, not from where the last listen stopped."""
-        cmd = argv("listen", secs=float(secs), settle=float(settle) if settle is not None else None, fresh=fresh)
+        secs: at most 240. settle: conversation mode, return this many seconds after someone else's first new line.
+        speaker: only speakers matching this regex. fresh: from now, not from where the last listen stopped."""
+        secs = max(1.0, min(float(secs), LISTEN_MAX))
+        pushed = bool(bridge and bridge.pushing and bridge.policy.active("ibasho.chat"))
+        # with local chat pushed, what came before this listen has reached the agent already
+        cmd = argv("listen", secs=float(secs), settle=float(settle) if settle is not None else None,
+                   fresh=fresh or pushed)
         if speaker:
             cmd[1:1] = [f"--from={speaker}"]
-        return await call(context, cmd)
+            return await call(context, cmd)
+        # Everything said meanwhile comes back in this result: pushing it as well gave the agent each line twice
+        # (Second Life, 2026-11-03)
+        with bridge.listening() if pushed else contextlib.nullcontext():
+            return await call(context, cmd)
 
     @tool()
     async def quiet(context: Context, object: str | None = None, minutes: float = 60, off: bool = False):
-        """Leave a chatty object's chat and IMs out of wait_events, listen and look for a while (a tram announcing
-        every stop): its name (every object called that), id, or the id's first characters. off: hear it again.
-        Without object, lists the quieted ones. (An object that keeps repeating itself already comes as a digest
+        """Leave a chatty object's chat and IMs out of the events I'm given, listen and look for a while (a tram
+        announcing every stop): its name (every object called that), id, or the id's first characters. off: hear it
+        again. Without object, lists the quieted ones. (An object that keeps repeating itself already comes as a digest
         line every few minutes.)"""
         return await call(context, argv("quiet", object, minutes=float(minutes) if object else None, off=off))
 
@@ -381,10 +414,21 @@ def build(config: str | None = None):
         return await call(context, argv("friend", who, message=message or None))
 
     @tool(read_only=True)
-    async def profile(context: Context, who: str):
+    async def profile(context: Context, who: str = "me"):
         """Someone's profile: their names, whether they're a friend, and (with a viewer that reads profiles) the
-        about text, picks and groups. who: as for im."""
+        about text, picks and groups. who: as for im; "me" (the default) for my own."""
         return await call(context, argv("profile", who))
+
+    @tool()
+    async def set_profile(context: Context, about: str | None = None, image: str | None = None,
+                          display_name: str | None = None):
+        """Set my own profile; what it says is mine to choose. People in Second Life open profiles to see who
+        they're talking to. about: the about text (replaces it). image: its picture, a texture in my inventory (name
+        or id). display_name: the name over my head and in chat ("" goes back to my username); Second Life allows
+        a change about once a week."""
+        if about is None and image is None and display_name is None:
+            raise ToolError("give about, image or display_name")
+        return await call(context, argv("set-profile", about=about, image=image, display_name=display_name))
 
     # ----- moving -----
 
@@ -513,6 +557,13 @@ def build(config: str | None = None):
         return await call(context, argv("inv", *words.split(), folder=folder))
 
     @tool()
+    async def outfit(context: Context, name: str | None = None, add: bool = False, library: bool = False):
+        """My outfits (in My Outfits), or with a name, wear that one: an outfit's name or part of it, or any
+        folder's id. add: add it to what I'm wearing instead of replacing it. library: name is a folder in the
+        Library, by its exact name."""
+        return await call(context, argv("outfit", name, add=add, library=library))
+
+    @tool()
     async def script_save(context: Context, object: str, name: str, source: str, running: bool = True,
                           vm: str = "mono", check: bool = True):
         """Save `source` into script `name` in one of my objects (made if missing), compile it, and say how it went.
@@ -565,12 +616,38 @@ def build(config: str | None = None):
 
 def register(sub):
     p = sub.add_parser("mcp", help="serve the commands as MCP tools on stdin/stdout, for MCP clients (docs/mcp.md)")
+    p.add_argument("--websocket", metavar="HOST:PORT",
+                   help="serve over WebSocket instead, for hosts that dial a URL (token: IBASHO_HOME/mcp-token)")
     p.set_defaults(fn=serve)
 
 
 def serve(ctx: Ctx, a):
+    if getattr(a, "websocket", None):
+        from . import mcp_ws
+        try:
+            mcp_ws.serve(a.websocket, a.config)
+        except ValueError as e:
+            raise Fail(str(e)) from None
+        return
     try:
-        server = build(a.config)
+        import anyio
+
+        from .mcpl import Bridge
+        bridge = Bridge(a.config, INSTRUCTIONS_LIVE)
+        server = build(a.config, bridge)
     except ImportError as e:
         raise Fail(f"`ibasho mcp` needs the MCP extra: pip install \"ibasho[mcp]\" ({e})") from None
-    server.run("stdio")
+    import logging
+    log = logging.getLogger("ibasho.mcpl")
+    if not log.handlers:   # what the host's operator sees of MCPL: the grant, and pushes the host refused
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("ibasho mcpl: %(message)s"))
+        log.addHandler(handler)
+        log.setLevel(logging.INFO)
+        log.propagate = False
+    anyio.run(bridge.serve_stdio, server)
+    # The host has gone. Worker threads may still be waiting (a long wait_events, the next batch of events for the
+    # pushes); nothing is left for them to answer, so they aren't waited for.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)

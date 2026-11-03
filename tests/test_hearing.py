@@ -64,7 +64,7 @@ def test_template_hearing_defaults_match_the_code(home):
     import tomllib
     raw = tomllib.loads(TEMPLATE.format(name="A", grid="g", viewer="v", login_uri=""))["hearing"]
     d = settings_mod.Hearing()
-    assert raw["enabled"] is False and raw["voice_device"] == ""
+    assert raw["enabled"] is False and raw["voice_device"] == "" and raw["model"] == ""
     for k, v in raw.items():
         assert getattr(d, k) == v, k
 
@@ -76,6 +76,7 @@ def test_settings_load_and_refuse(home):
     add_hearing(cfg, enabled=True, heard_as=["Ivory", " "], gate_db=-50)
     h = settings_mod.load(cfg)
     assert h.enabled and h.heard_as == ["Ivory"] and h.gate_db == -50.0
+    assert h.model == settings_mod.default_model() in ("small.en", "base.en")
     with cfg.path.open("a", encoding="utf-8") as f:
         f.write("voice = true\n")
     with pytest.raises(ConfigError, match="unknown setting"):
@@ -211,6 +212,80 @@ def test_hear_on_is_the_persons_choice(world_connected, capsys):
     assert code == 0 and "hearing off" in out
     code, _, err = run(w, capsys, "hear", "run")
     assert code == 1 and "hearing.enabled" in err
+
+
+# ---------- Linux: the sound server's sinks (pactl faked) ----------
+
+class FakePactl:
+    """Answers capture._pactl like a PulseAudio with Ibasho's three sinks, and records what it's told to do."""
+
+    def __init__(self, default="ibasho_world", voice_on=0):
+        self.default, self.calls = default, []
+        self.sinks = [{"index": i, "name": n, "description": n.capitalize()}
+                      for i, n in enumerate(("ibasho_world", "ibasho_voice", "ibasho_silence"))]
+        self.inputs = [{"index": 7, "sink": 0, "properties": {"application.name": "ibasho-viewer-bin"}},
+                       {"index": 9, "sink": voice_on, "properties": {"application.name": "WEBRTC VoiceEngine"}}]
+
+    def __call__(self, parec, *args):
+        self.calls.append(args)
+        if args == ("get-default-sink",):
+            return self.default + "\n"
+        if args[-2:] == ("list", "sinks"):
+            return json.dumps(self.sinks)
+        if args[-2:] == ("list", "sink-inputs"):
+            return json.dumps(self.inputs)
+        return ""
+
+
+def test_linux_sinks_default_and_the_viewers_names_for_them(monkeypatch):
+    from ibasho.hearing import capture
+    fake = FakePactl()
+    monkeypatch.setattr(capture, "_pactl", fake)
+    monkeypatch.setattr(capture, "WINDOWS", False)
+    devs = capture._sinks(Path("parec"))
+    assert [(d.id, d.is_default) for d in devs] == [("ibasho_world", True), ("ibasho_voice", False),
+                                                    ("ibasho_silence", False)]
+    # the viewer's voice (WebRTC) names a sink by its description
+    assert capture.find_device(devs, "ibasho_voice").viewer_id == "Ibasho_voice"
+    assert capture.voice_device_for_viewer(Path("parec")) == "Ibasho_voice"
+    assert capture.voice_device_for_viewer(None) is None
+    assert capture.sink_exists(Path("parec"), capture.WORLD_SINK)
+
+
+def test_linux_voice_is_kept_off_the_world_sink(monkeypatch):
+    from ibasho.hearing import capture
+    fake = FakePactl(voice_on=0)   # voice chat playing on the sink the viewer ear records
+    monkeypatch.setattr(capture, "_pactl", fake)
+    capture.keep_voice_off_world(Path("parec"))
+    assert ("move-sink-input", "9", "ibasho_voice") in fake.calls
+    assert not any("7" in c for c in fake.calls)   # the viewer's own sound stays
+    fake = FakePactl(voice_on=1)
+    monkeypatch.setattr(capture, "_pactl", fake)
+    capture.keep_voice_off_world(Path("parec"))
+    assert not any(c[0] in ("move-sink-input", "set-sink-input-mute") for c in fake.calls)
+    fake = FakePactl(voice_on=0)   # no voice sink: muted instead
+    fake.sinks = fake.sinks[:1]
+    monkeypatch.setattr(capture, "_pactl", fake)
+    capture.keep_voice_off_world(Path("parec"))
+    assert ("set-sink-input-mute", "9", "1") in fake.calls
+
+
+def test_trail_polls_only_when_woken_on_servers():
+    from ibasho.hearing.ears import Trail
+
+    class Api:
+        n = 0
+
+        def cmd(self, *a, **k):
+            Api.n += 1
+            return {"region": [1.0, 2.0, 3.0]}
+
+    t = Trail(Api(), lazy=True)
+    time.sleep(0.6)
+    assert Api.n == 0   # no requests while nothing is heard: the viewer keeps its idle frame rate
+    t.wake()
+    time.sleep(1.2)
+    assert Api.n >= 2
 
 
 # ---------- native capture ----------

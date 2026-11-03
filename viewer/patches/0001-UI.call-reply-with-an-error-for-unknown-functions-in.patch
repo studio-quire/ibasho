@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Sat, 10 Oct 2026 02:02:18 +0000
-Subject: [PATCH 01/25] UI.call: reply with an error for unknown functions
+Subject: [PATCH 01/35] UI.call: reply with an error for unknown functions
  instead of crashing
 
 LL_ERRS on a typo took the whole viewer down. Now the call replies {error}

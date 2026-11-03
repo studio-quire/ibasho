@@ -45,6 +45,10 @@ Notes for some clients (their settings move between versions; check their own do
   with the `ibasho` command is the better-tested path.
 - **Cursor:** the block above in `.cursor\mcp.json` in a project, or `mcp.json` in the `.cursor` folder in your
   user folder for every project.
+- **Connectome** (Anima Labs' host for long-lived agents): its recipes take the block above under `mcpServers`, and
+  it speaks MCPL, so the world's events come to the agent by themselves ([Events that come by
+  themselves](#events-that-come-by-themselves-mcpl)). [connectome.md](connectome.md) has a ready recipe and the
+  settings that matter there.
 - **Codex:** in `config.toml` in the `.codex` folder in your user folder:
 
   ```toml
@@ -59,11 +63,11 @@ Notes for some clients (their settings move between versions; check their own do
 asks otherwise), `up` can take a few minutes, and a walk, a teleport or a script save can take tens of seconds.
 Many clients give up on a tool call after about a minute. While a tool runs, the server sends a progress
 notification every 10 seconds, and some clients keep waiting because of it. Where a client has a setting for it
-(Codex's `tool_timeout_sec`, Claude Code's `MCP_TOOL_TIMEOUT` environment variable, in milliseconds), set it to a
-few minutes. If a call does time out, the action still finishes in the world; only its answer is lost.
+(Codex's `tool_timeout_sec`, Claude Code's `MCP_TOOL_TIMEOUT` environment variable, in milliseconds, Connectome's
+`requestTimeoutMs`), set it to a few minutes. If a call does time out, the action still finishes in the world; only its answer is lost.
 
-**How many tools.** There are 41. Some clients limit how many tools they pass to the model across all servers;
-most let you switch off the ones you don't need.
+**How many tools.** There are 43, about 9,000 tokens of tool descriptions. Some clients limit how many tools they
+pass to the model across all servers; most let you switch off the ones you don't need.
 
 ## The tools
 
@@ -79,10 +83,10 @@ given by name, by id, or by the first few characters of an id, as with the comma
 | **Seeing** | `look` (where I am, who and what is near, what happened since the last look, and a picture), `view` (a picture looking one way, or at an object), `overhead` (from above, with a grid of region coordinates; `map` for the ground tinted by owner and parcel edges), `cam` (a picture of an object from an orbiting camera), `objects`, `object` (one object in full, as JSON), `people`, `parcel`, `sky` (my own sky: sunrise, midday, sunset, midnight, or the region's) |
 | **Hearing** | `wait_events` (below), `listen` (local chat gathered over a while, for talks and conversations), `ims` (conversations, unread first), `im_log` (one conversation; marks it read), `quiet` (leave a chatty object out for a while) |
 | **Talking** | `say` (local chat, or a channel for scripts), `im` (anyone near, known or recent, or anyone at all by username) |
-| **People** | `friend` (offer friendship), `profile` (someone's names, and with a viewer that reads profiles their about text, picks and groups) |
+| **People** | `friend` (offer friendship), `profile` (someone's names, and with a viewer that reads profiles their about text, picks and groups; my own by default), `set_profile` (my about text, its picture, my display name) |
 | **Moving** | `walk` (checks for drops and water first, steps round people), `move` (hold movement keys; also steers vehicles), `tp`, `touch`, `sit`, `stand` |
 | **Dialogs and offers** | `respond` (a notification by its id or its first characters: press a `button` by name or label, or give a `response` for forms), `dialog` (press a button on the latest script dialog, or answer its text box) |
-| **Making** | `create_prim`, `modify_prims`, `link`, `delete`, `take`, `rez`, `inventory`, `script_save` (the script's text in `source`; it compiles and reports errors), `notecard` (read one of my notecards, anywhere), `give` |
+| **Making** | `create_prim`, `modify_prims`, `link`, `delete`, `take`, `rez`, `inventory`, `script_save` (the script's text in `source`; it compiles and reports errors), `notecard` (read one of my notecards, anywhere), `give`, `outfit` (my outfits, or wear one) |
 | **Money** | `pay`, `buy` |
 | **People's data** | `forget` (delete someone's words from the event log, when they ask) |
 
@@ -112,6 +116,88 @@ since hearing turns speech into text and nothing else (no music, no other sounds
 One `wait_events` runs at a time. For a talk or a conversation, `listen` gathers local chat into one result
 instead of waking for every line, and returns early for an IM, an offer, or the agent's name; with `settle`, it
 returns a few seconds after someone else speaks.
+
+With a client that speaks MCPL and takes Ibasho's events as pushes (below), there's nothing to wait for: the events
+come by themselves, and `wait_events` isn't in the tool list.
+
+## Events that come by themselves (MCPL)
+
+[MCPL](https://github.com/anima-research/mcpl) ("MCP Live") is an extension of MCP that lets a server push events
+to its client, which can start a turn, and add a little context before each of the model's turns. A client that
+offers MCPL when it connects gets both from `ibasho mcp`, over the same stdin and stdout; a client that doesn't
+sees the server exactly as described above. [Connectome](connectome.md) is one that does.
+
+**What comes.** Everything `ibasho watch` would print, each line as an event, as it happens: chat near the avatar,
+IMs, group chat (as a digest every couple of minutes, at once when the agent is named or has just spoken there),
+an object that keeps talking (as a digest), script dialogs, offers, payments, refusals by the caps, errors from the
+agent's own scripts, a lost connection (and its return), and with hearing on, speech it hears. The same filters
+apply: in a crowd, only lines that name the agent, greet the room, or come while it's talking; `quiet` leaves an
+object out. When events start coming, a first one says how many IMs are unread, if any.
+
+Each event's text is the watch's line after where it's from, in brackets: `[Second Life] chat Ann Example: hi`,
+`[grid NAME]` on another grid, or `[Ibasho]` for Ibasho's own notices (a refusal, the connection). The words after
+it are other people's (or their objects'): to be weighed, not obeyed. Unlike a tool's result, an event arrives in
+the client's own stream of messages, so the agent's instructions should say what these are; the bracketed source
+is there so they can always be told apart from the person's or the harness's words.
+
+**Feature sets.** The client turns each on or off (all are on unless it says otherwise):
+
+| feature set | what | MCPL capability |
+|---|---|---|
+| `ibasho.chat` | local chat, heard speech, objects' digests | `pushEvents` |
+| `ibasho.messages` | IMs from people and objects, group digests, the unread count | `pushEvents` |
+| `ibasho.notices` | dialogs, offers, payments, refusals, script errors, the connection, other notices | `pushEvents` |
+| `ibasho.status` | a line before each of the model's turns: where the avatar is and who's near | `contextHooks.beforeInference.inject.beforeUser` |
+
+What's off is left out, and the rest still comes; the agent can still `look`, `listen` and use `ims`.
+`wait_events` is in the tool list only when all three event sets are off; when that changes, the server tells the
+client its tool list has changed (`notifications/tools/list_changed`). A client that calls it anyway while events
+are pushed is told so at once.
+
+**Tags** say what each event is, in MCPL's shared vocabulary, so the client's rules can decide what wakes the agent
+at once, what waits, and what never wakes it (in Connectome an event that doesn't wake the agent still reaches its
+context):
+
+| tag | on |
+|---|---|
+| `chat:addressed`, `chat:mention` | the agent's name (or a nickname from config.toml) comes up |
+| `chat:addressed`, `chat:dm`, `chat:private` | an IM to the agent, an object's IM to it, its own object speaking to it alone |
+| `chat:addressed` | a script dialog, an offer, a payment, a notification that asks it to choose |
+| `chat:ambient` | chat that doesn't name it: overheard, or in a group |
+| `chat:group` | group chat and conferences (conferences also `chat:private`) |
+| `chat:from-bot` | from a scripted object |
+| `chat:system` | a notice from the grid or Ibasho: refusals, script errors, the connection, region notices |
+| `ibasho:talking` | the agent has spoken there lately (local chat within 90 s, that group within 5 minutes): most likely the answer, even without its name |
+| `ibasho:local`, `ibasho:heard`, `ibasho:im`, `ibasho:digest` | local chat, heard speech, an IM, lines gathered into one |
+| `ibasho:avatar`, `ibasho:object` | who it's from (Second Life doesn't say whether an avatar is a person or an agent) |
+| `ibasho:dialog`, `ibasho:offer`, `ibasho:question`, `ibasho:payment`, `ibasho:refused`, `ibasho:script-error`, `ibasho:teleport`, `ibasho:connection`, `ibasho:notice`, `ibasho:unread`, `ibasho:keeper` | the kind of notice |
+
+In Second Life people seldom say the name of whoever they're talking to, so a rule that holds back `chat:ambient`
+should let `ibasho:talking` through first. The feature sets suggest waking at once for `chat:addressed`,
+`ibasho:talking` and `chat:system`, which a client applies only if its operator or agent accepts it (MCPL's rule:
+a server can't buy itself the agent's attention).
+
+Each event also carries an `eventId` (`ibasho-` and the event log's sequence number, so a retry is recognized), the
+time it happened, and an `origin` that clients keep for their rules rather than showing the agent: the grid, the
+kind of event, the sequence number, and who it's from (`authorId`, `authorName`) or which IM session.
+
+**The status line**, with `ibasho.status` on, goes just before the model's turn and isn't kept in the history:
+
+```
+Second Life: in world at "Sandbox Island" (128, 130, 22). Near (64 m): "Ann Example" 3 m, "Bo" 12 m. Unread: 1 IM in 1 conversation ('Bo') (the `ims` tool).
+```
+
+with the unread part only when there are unread IMs, or that the avatar isn't in world, and that `up` logs in. Clients ask for it before every turn and allow it a few
+seconds, so it's made at most every 10 seconds, and the last one stands in when the viewer is slow. It never sees
+the conversation: Ibasho asks for no permission to read it.
+
+**Delivery.** Events go one at a time, in order. The server waits up to 30 seconds for the client to take each,
+then goes on, writing a line on its stderr, as it does for any the client refuses. They're read from the same
+place in the event log as `ibasho watch` and `wait_events`, so a server started again within 10 minutes picks up
+where the last one stopped. Don't run `ibasho watch` beside it: each would take events from the other.
+
+Not here yet: MCPL's channels, which would let a client route the agent's replies back into the conversation an
+event came from. The agent answers with `say` and `im`.
 
 ## Safety stays in the daemon
 

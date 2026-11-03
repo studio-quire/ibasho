@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
+from pathlib import Path
 
 from .. import geometry as geo
 from ..api import ApiError
@@ -95,9 +97,18 @@ def register(sub):
     p.add_argument("--dist", type=float, default=96)
     p.set_defaults(fn=people)
     sub.add_parser("friends", help="friends, online first").set_defaults(fn=friends)
-    p = sub.add_parser("profile", help="someone's profile: about, picks, groups (a name, username or id)")
-    p.add_argument("who", help="as for `im`: someone near, known or recent, or anyone by username (first.last)")
+    p = sub.add_parser("profile", help="someone's profile: about, picks, groups (a name, username or id); "
+                                       "without one, my own")
+    p.add_argument("who", nargs="?", default="me",
+                   help="as for `im`: someone near, known or recent, or anyone by username (first.last)")
     p.set_defaults(fn=profile)
+    p = sub.add_parser("set-profile", help="my own profile: the about text, its picture, my display name")
+    p.add_argument("--about", help="the about text, which people read to see who I am")
+    p.add_argument("--about-file", help="the about text from a file (UTF-8)")
+    p.add_argument("--image", help="the profile picture: a texture in my inventory (name or item id) or an asset id")
+    p.add_argument("--display-name", help="the name over my head and in chat (\"\" goes back to my username); "
+                                          "Second Life allows a change about once a week")
+    p.set_defaults(fn=set_profile)
     sub.add_parser("parcel", help="the region and parcel I'm on").set_defaults(fn=parcel)
 
 
@@ -203,7 +214,17 @@ def view(ctx: Ctx, a):
     b = math.radians(deg)
     dx, dy = math.sin(b), math.cos(b)
     pitch = math.radians(a.pitch)
-    pos = (eye[0] - a.back * dx, eye[1] - a.back * dy, eye[2])
+    back = a.back
+    if back > 0 and ctx.api.ibasho:
+        # Behind my eyes while I face the other way is in front of my face: the picture was all face (Second Life,
+        # 2026-11-03). Then the camera goes just ahead of my head instead.
+        try:
+            heading = ctx.api.op("IbashoAgent", "move", {"secs": 0.05, "wait": True}, timeout=10).get("heading")
+        except ApiError:
+            heading = None
+        if heading is not None and abs((float(heading) - deg + 180) % 360 - 180) > 90:
+            back = -0.4
+    pos = (eye[0] - back * dx, eye[1] - back * dy, eye[2])
     focus = (eye[0] + 20 * dx * math.cos(pitch), eye[1] + 20 * dy * math.cos(pitch), eye[2] + 20 * math.sin(pitch))
     _posed_shot(ctx, a, pos, focus)
 
@@ -440,7 +461,13 @@ def friends(ctx: Ctx, a):
 def profile(ctx: Ctx, a):
     need_ibasho(ctx, "profile")
     api = ctx.api
-    _, who = resolve(ctx, a.who, ("avatar",))
+    mine = a.who.strip().lower() in ("me", "myself", "")
+    if mine:
+        who = str((api.status().get("self") or {}).get("id") or "")
+        if not is_uuid(who):
+            raise Fail("my own id isn't known yet (not in world?)")
+    else:
+        _, who = resolve(ctx, a.who, ("avatar",))
     n = names(ctx, [who]).get(who)
     if not n:
         raise Fail(f"no avatar has id {who}")
@@ -471,6 +498,63 @@ def profile(ctx: Ctx, a):
         print(f"web: {r['web_url']}")
     if r.get("partial"):
         print("(this grid didn't send all of the profile in time: groups or picks may be missing)")
+    if mine and r.get("display_name_next_change") and ctx.cfg.linden_grid:   # OpenSim reports one but has none
+        print(f"(my display name can change again from {utc(r['display_name_next_change'])})")
+
+
+def set_profile(ctx: Ctx, a):
+    """My profile is mine to write: Ibasho passes on whatever I choose."""
+    need_ibasho(ctx, "set-profile")
+    api = ctx.api
+    about = a.about
+    if a.about_file is not None:
+        if about is not None:
+            raise Fail("--about or --about-file, not both")
+        about = Path(a.about_file).read_text(encoding="utf-8")
+    if about is None and a.image is None and a.display_name is None:
+        raise Fail("nothing to set: --about, --about-file, --image or --display-name")
+    if not api.has_op("IbashoAgent", "setProfile"):
+        raise Fail("setting my own profile needs the Ibasho viewer 0.2 or newer")
+    if about is not None or a.image is not None:
+        args: dict = {}
+        if about is not None:
+            args["about"] = about
+        if a.image is not None:
+            args["image_id"] = texture_asset(ctx, a.image)
+        r = api.op("IbashoAgent", "setProfile", args, timeout=60)
+        print("profile saved" + (" (sent; this grid doesn't confirm, `ibasho profile` shows it)"
+                                 if r.get("by_message") else ""))
+    if a.display_name is not None:
+        r = api.op("IbashoAgent", "setDisplayName", {"name": a.display_name}, timeout=45)
+        nxt = f"; the next change can be made from {utc(r['next_change'])}" if r.get("next_change") else ""
+        print(f"display name now {r.get('display_name')!r}{nxt} (others see it within a few minutes)")
+
+
+def utc(stamp) -> str:
+    """Second Life's ISO time (2026-11-10T18:54:25.78Z) as 2026-11-10 18:54 UTC."""
+    m = re.match(r"(\d{4}-\d\d-\d\d)T(\d\d:\d\d)", str(stamp))
+    return f"{m[1]} {m[2]} UTC" if m else f"{stamp} UTC"
+
+
+def texture_asset(ctx: Ctx, image: str) -> str:
+    """A texture's asset id, from an item in my inventory (its id, or its name in Textures), else as given."""
+    api = ctx.api
+    if is_uuid(image):
+        info = api.cmd("LLInventory", "getItemsInfo", {"item_ids": [image]}).get("items") or {}
+        item = info.get(image.lower()) or info.get(image)
+        if not item:
+            return image   # not an item of mine: an asset id
+        image = str(item.get("name") or image)
+        if is_uuid(str(item.get("asset_id"))) and not str(item["asset_id"]).startswith("00000000-"):
+            return str(item["asset_id"])
+        raise Fail(f"{image!r}: the grid doesn't show me that texture's asset id (it needs full permissions)")
+    found = api.cmd("LLInventory", "collectDescendantsIf",
+                    {"folder_id": api.cmd("LLInventory", "getBasicFolderID", {"ft_name": "texture"})["id"],
+                     "name": image}).get("items") or {}
+    hits = sorted((it for it in found.values() if it.get("name") == image), key=lambda it: it.get("creation_date", 0))
+    if not hits:
+        raise Fail(f"no texture named {image!r} in my Textures folder (or give its id)")
+    return texture_asset(ctx, str(hits[-1]["id"]))
 
 
 def parcel(ctx: Ctx, a):
@@ -482,6 +566,11 @@ def parcel(ctx: Ctx, a):
     who = (owner or {}).get("display_name") or short(p.get("owner_id")) + (" (group)" if p.get("group_owned") else "")
     print(f"parcel {p.get('name')!r} {p.get('area')}m2 owner {who}")
     print(f"  allowed: {' '.join(p.get('allowed', []))}")
+    if "my_voice" in r:
+        allowed = "voice" in p.get("allowed", [])
+        print(f"  voice chat: {'allowed' if allowed else 'off'} here; mine "
+              + ("on (people shows who's in voice and speaking)" if r["my_voice"] else
+                 "off (the person running me turns it on: docs/hearing.md, Voice chat)"))
     if p.get("desc"):
         print(f"  desc: {p['desc']!r}")
 

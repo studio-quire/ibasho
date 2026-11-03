@@ -193,7 +193,15 @@ def finish_update(cfg) -> str | None:
 
 # ---------- the commands ----------
 
+def windows_only():
+    if os.name != "nt":
+        raise Fail("`ibasho viewer` installs and updates the Windows viewer. On Linux, the container image brings "
+                   "its viewer with it; otherwise unpack the Linux tarball (Ibasho-VERSION-linux-x86_64.tar.xz) "
+                   "and point viewer.path in the config at the ibasho-viewer script in it.")
+
+
 def install(ctx: Ctx, a):
+    windows_only()
     try:
         cfg = ctx.cfg
     except Fail:
@@ -225,6 +233,7 @@ def install(ctx: Ctx, a):
 
 
 def update(ctx: Ctx, a):
+    windows_only()
     cfg = ctx.cfg
     exe = Path(cfg.viewer_path) if cfg.viewer_path else None
     if exe is None or not exe.is_file():
@@ -294,6 +303,7 @@ def update(ctx: Ctx, a):
 
 
 def rollback(ctx: Ctx, a):
+    windows_only()
     cfg = ctx.cfg
     k = kept(cfg)
     previous = Path(k["previous"]) if k else None

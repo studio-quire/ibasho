@@ -1,4 +1,4 @@
-"""Processes and ports on Windows.
+"""Processes and ports (on Windows especially).
 
 Windows reuses PIDs quickly, so a pid from a file can name someone else's process by the time we read it, and
 killing its tree would take theirs down. A pid file is trusted only if its process started before the file was
@@ -6,7 +6,7 @@ written.
 
 Sockets bind with SO_EXCLUSIVEADDRUSE where available: without it Windows lets a second process bind a port
 that's already listening, and connections then go to either. With it, the port doubles as a lock: a second
-daemon fails to start instead of quietly sharing.
+daemon fails to start instead of quietly sharing. On Linux a listening port is exclusive by itself.
 """
 
 from __future__ import annotations
@@ -57,6 +57,10 @@ def bind_exclusive(port: int, host: str = "127.0.0.1") -> socket.socket:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
         s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    elif os.name == "posix":
+        # Elsewhere a port is exclusive anyway; this lets a restarted daemon bind while the last one's connections
+        # linger in TIME_WAIT (a minute, otherwise)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((host, port))
     s.listen(16)
     s.setblocking(False)
@@ -93,8 +97,10 @@ def quiet_startupinfo():
 
 
 def spawn(args: list[str] | str, log: Path, cwd: Path | None = None, env: dict | None = None) -> int:
-    """Start a background process that outlives the command that started it. Tries to leave the caller's job
-    object (some harnesses kill a command's whole job when it ends), and goes without if the job forbids it.
+    """Start a background process that outlives the command that started it. On Windows it tries to leave the
+    caller's job object (some harnesses kill a command's whole job when it ends), and goes without if the job
+    forbids it; elsewhere it starts a session of its own, so the caller's terminal and process group closing
+    don't take it down.
     Its output is appended to `log`, which starts afresh once it's past OUT_MAX. Its windows, if any, start
     without taking focus. It runs in `cwd`, else in the log's folder (never the caller's, which may be the
     agent's)."""
@@ -108,7 +114,8 @@ def spawn(args: list[str] | str, log: Path, cwd: Path | None = None, env: dict |
         for extra in ((CREATE_BREAKAWAY_FROM_JOB, 0) if sys.platform == "win32" else (0,)):
             try:
                 p = subprocess.Popen(args, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
-                                     creationflags=flags | extra, close_fds=True, startupinfo=quiet_startupinfo())
+                                     creationflags=flags | extra, close_fds=True, startupinfo=quiet_startupinfo(),
+                                     start_new_session=sys.platform != "win32")
                 return p.pid
             except PermissionError:
                 if not extra:

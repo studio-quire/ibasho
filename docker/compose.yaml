@@ -1,0 +1,23 @@
+# Ibasho in a container beside an MCP host on the same Linux server (docs/linux.md). Put IBASHO_MAC in a .env file
+# beside this one: a MAC address of this install's own (docs/linux.md makes one). The viewer's saved login is
+# encrypted with the machine's MAC address, so it must stay the same; and Linden Lab sees it, so it mustn't be one
+# that other installs share.
+name: ibasho
+services:
+  ibasho:
+    image: ibasho:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ibasho
+    mac_address: ${IBASHO_MAC:?set IBASHO_MAC in .env (docs/linux.md)}
+    ports:
+      - "127.0.0.1:9280:9280"   # ibasho mcp over WebSocket, for the MCP host on this server
+      - "127.0.0.1:6080:6080"   # the person's view of the screen, only while they log in (ibasho login)
+    volumes:
+      - ibasho-home:/home/ibasho
+    shm_size: 256m
+    stop_grace_period: 30s      # time to log the avatar out
+    restart: unless-stopped
+volumes:
+  ibasho-home:

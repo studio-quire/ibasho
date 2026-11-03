@@ -278,13 +278,16 @@ def walk(ctx: Ctx, a):
         if last and math.hypot(g[0] - last[0], g[1] - last[1]) < 0.2:
             still += 1
             if still >= 3:
-                print("stopped short (stuck?)")
                 break
         else:
             still = 0
         last = g
     p = position(ctx)
     d = math.hypot(p["global"][0] - asked[0], p["global"][1] - asked[1])
+    # standing still near the target is arriving (the autopilot ends a little off it, more so after going round
+    # someone); only far from it is it stuck (seen as false alarms on Second Life, 2026-11-03)
+    if still >= 3 and d > a.stop + 3:
+        print("stopped short (stuck?)")
     print(f"at {[round(v, 1) for v in p['region']]}, {d:.0f} m from the target{note}")
 
 
@@ -396,9 +399,19 @@ def touch(ctx: Ctx, a):
 
 
 def sit(ctx: Ctx, a):
+    since = ctx.api.seq()
     r = ctx.api.cmd("LLAgent", "requestSit", {"obj_uuid": rid(ctx, a.id)} if a.id else {}, timeout=15)
     if isinstance(r, dict) and r.get("error"):
         raise Fail(str(r["error"]))
+    # The region refuses a sit with a notification (CantSitNoRoom, CantSitTooFar...), not in the request's answer
+    end = time.time() + 3
+    while time.time() < end:
+        for e in ctx.api.events(since, wait=1, kinds=["notify"]):
+            since = max(since, e["seq"])
+            d = e.get("data") or {}
+            if str(d.get("name") or "").startswith(("CantSit", "SitFail")):
+                raise Fail(f"the region refused the sit ({d.get('name')}): "
+                           + humanize(ctx, str(d.get("message") or "")).replace("\n", " "))
 
 
 def stand(ctx: Ctx, a):

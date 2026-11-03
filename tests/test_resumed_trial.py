@@ -87,9 +87,9 @@ def test_seen_notification_ids_outlast_the_daemon(world_connected):
     w = world_connected
     w.emit("IbashoNotify", {"id": NOTE_ID, "name": "PaymentReceived", "type": "notify", "message": "x",
                             "form": [], "time": utc()})
-    w.until(lambda: NOTE_ID in w.daemon.notify_ids)
     from ibasho.daemon import NotifyIds
-    assert NOTE_ID in NotifyIds(w.cfg.state_dir / "notify_ids.json")
+    w.until(lambda: NOTE_ID in w.daemon.notify_ids)
+    w.until(lambda: NOTE_ID in NotifyIds(w.cfg.state_dir / "notify_ids.json"))   # written just after
 
 
 # ---------- the natural guesses ----------
@@ -306,16 +306,109 @@ def test_in_no_region_is_seen(world_connected, monkeypatch):
 
 # ---------- the display name ----------
 
-def test_check_reminds_about_the_display_name(home, capsys):
+def test_check_leaves_the_display_name_to_the_agent(home, capsys):
+    """The display name and profile are the agent's to choose (2026-11-03): no wording is asked of them."""
     cfg = write_config(home, grid="secondlife", confirmed=True)
     with pytest.raises(SystemExit):     # no viewer here: a PROBLEM, after the notes
         main(["--config", str(cfg.path), "check"])
-    assert "NOTE: the scripted-agent flag and the display name haven't been checked" in capsys.readouterr().out
+    assert "NOTE: the scripted-agent flag hasn't been checked" in capsys.readouterr().out
     config_mod.save_flag_check(cfg, cfg.grid_arg, {"t": time.time(), "flagged": True, "display_name": "Sunny"})
     with pytest.raises(SystemExit):
         main(["--config", str(cfg.path), "check"])
-    assert "NOTE: the display name ('Sunny') doesn't say AI" in capsys.readouterr().out
-    config_mod.save_flag_check(cfg, cfg.grid_arg, {"t": time.time(), "flagged": True, "display_name": "Sunny (AI)"})
-    with pytest.raises(SystemExit):
-        main(["--config", str(cfg.path), "check"])
     assert "NOTE" not in capsys.readouterr().out
+
+
+# ---------- setting my own profile (0.2) ----------
+
+TEX_ITEM = "7e570000-0000-4000-8000-000000000001"
+TEX_ASSET = "a55e7000-0000-4000-8000-000000000002"
+
+
+def profile_world(world):
+    w = world
+    w.viewer.extra_ops = {"IbashoAgent": ["profile", "setProfile", "setDisplayName"]}
+    w.connect()
+    nobody_around(w)
+    h = w.viewer.handlers
+    h[("IbashoAgent", "setProfile")] = lambda d: {}
+    h[("IbashoAgent", "setDisplayName")] = lambda d: {"display_name": d["name"], "next_change": "2026-11-10T12:00:00Z"}
+    return w
+
+
+def test_set_profile_passes_on_whatever_the_agent_writes(world, capsys):
+    w = profile_world(world)
+    about = "I'm a bot. Or not; my call.\nSecond line"
+    code, out, err = run(w, capsys, "set-profile", "--about", about, "--display-name", "Wren")
+    assert code == 0, err
+    assert w.viewer.sent("IbashoAgent", "setProfile")[-1]["about"] == about
+    assert w.viewer.sent("IbashoAgent", "setDisplayName")[-1]["name"] == "Wren"
+    assert "profile saved" in out and "display name now 'Wren'" in out and "2026-11-10" in out
+    code, out, err = run(w, capsys, "set-profile", "--display-name", "")   # back to the username
+    assert code == 0 and w.viewer.sent("IbashoAgent", "setDisplayName")[-1]["name"] == "", err
+    code, _, err = run(w, capsys, "set-profile")
+    assert code == 1 and "nothing to set" in err
+
+
+def test_set_profile_finds_the_pictures_asset(world, capsys):
+    w = profile_world(world)
+    h = w.viewer.handlers
+    h[("LLInventory", "getBasicFolderID")] = lambda d: {"id": "f0000000-0000-4000-8000-000000000000"}
+    h[("LLInventory", "collectDescendantsIf")] = lambda d: {"items": {TEX_ITEM: {
+        "id": TEX_ITEM, "name": "me at the harbour", "creation_date": 5}}}
+    h[("LLInventory", "getItemsInfo")] = lambda d: {"items": {TEX_ITEM: {
+        "id": TEX_ITEM, "name": "me at the harbour", "asset_id": TEX_ASSET}} if TEX_ITEM in d["item_ids"] else {}}
+    code, _, err = run(w, capsys, "set-profile", "--image", "me at the harbour")
+    assert code == 0, err
+    sent = w.viewer.sent("IbashoAgent", "setProfile")[-1]
+    assert sent["image_id"] == TEX_ASSET and "about" not in sent
+    code, _, err = run(w, capsys, "set-profile", "--image", TEX_ASSET)     # not an item: an asset id as given
+    assert code == 0 and w.viewer.sent("IbashoAgent", "setProfile")[-1]["image_id"] == TEX_ASSET, err
+
+
+def test_a_display_name_change_too_soon_says_when(world, capsys):
+    w = profile_world(world)
+    w.viewer.handlers[("IbashoAgent", "setDisplayName")] = lambda d: {
+        "error": "the display name can change about once a week; the next change can be made from "
+                 "2026-11-09T08:00:00Z (UTC)", "next_change": "2026-11-09T08:00:00Z"}
+    code, _, err = run(w, capsys, "set-profile", "--display-name", "Wren")
+    assert code == 1 and "once a week" in err and "2026-11-09" in err
+
+
+def test_set_profile_with_an_older_viewer_says_so(world_connected, capsys):
+    code, _, err = run(world_connected, capsys, "set-profile", "--about", "hello")
+    assert code == 1 and "0.2 or newer" in err
+
+
+def test_profile_set_ops_check_types_not_words(tmp_path):
+    pol = Policy(Caps(), Ledger(tmp_path / "ledger.json"))
+    st = ViewerState(logged_in=True, notifications={})
+    ok = lambda op, **kw: pol.check("IbashoAgent", dict(op=op, **kw), st).ok
+    assert ok("setProfile", about="anything at all, no AI in it") and ok("setProfile", about="")
+    assert ok("setProfile", image_id=TEX_ASSET) and ok("setDisplayName", name="Wren") and ok("setDisplayName", name="")
+    assert not ok("setProfile", about=5) and not ok("setProfile", image_id="me.png")
+    assert not ok("setDisplayName") and not ok("setDisplayName", name=["x"])
+
+
+# ---------- where the next login starts ----------
+
+def test_the_start_place_is_only_given_on_second_lifes_main_grid(home):
+    """secondlife://REGION/X/Y/Z means a place on Second Life's main grid to the viewer, which then logs in there
+    whatever --grid said: on a test grid (or aditi) it would send the login to Linden Lab's."""
+    import json as json_mod
+    for grid, expect in (("secondlife", True), ("aditi", False), ("localhost-9000", False)):
+        cfg = write_config(home, grid=grid, confirmed=True)
+        cfg.state_dir.mkdir(parents=True, exist_ok=True)
+        (cfg.state_dir / "last_place.json").write_text(json_mod.dumps(
+            {"grid": cfg.grid_arg, "region": "Ahern", "pos": [10, 20, 30], "t": time.time()}), encoding="utf-8")
+        got = lifecycle.start_slurl(cfg)
+        assert got == (["--url", "secondlife://Ahern/10/20/30"] if expect else []), grid
+
+
+def test_the_persons_login_can_start_somewhere_other_than_home(home):
+    """A new account's home can keep sending it somewhere that refuses it (seen 2026-11-03): `login --start`."""
+    from ibasho.cli.common import Fail
+    cfg = write_config(home, grid="secondlife", confirmed=True)
+    assert lifecycle.start_slurl(cfg, "Sandbox Island") == ["--url", "secondlife://Sandbox%20Island/128/128/30"]
+    cfg = write_config(home, grid="localhost-9000", confirmed=True)
+    with pytest.raises(Fail):
+        lifecycle.start_slurl(cfg, "Sandbox Island")

@@ -1,0 +1,12 @@
+# The container's own sound server (PulseAudio, started by the entrypoint). Nothing here reaches speakers: every
+# sink is a null sink, and only hearing records them (docs/hearing.md).
+#   ibasho_world   the viewer's own sound (the default sink)
+#   ibasho_voice   voice chat (`ibasho up` points the viewer's voice output here); recorded only if
+#                  hearing.voice_device says so
+#   ibasho_silence what the viewer's microphone hears: nothing (Ibasho never speaks in voice)
+load-module module-native-protocol-unix auth-anonymous=1 socket=/tmp/ibasho-pulse/native
+load-module module-null-sink sink_name=ibasho_world sink_properties=device.description=Ibasho_world
+load-module module-null-sink sink_name=ibasho_voice sink_properties=device.description=Ibasho_voice
+load-module module-null-sink sink_name=ibasho_silence sink_properties=device.description=Ibasho_silence
+set-default-sink ibasho_world
+set-default-source ibasho_silence.monitor

@@ -71,7 +71,7 @@ def args_after_exe(cmdline: str) -> list[str]:
 def test_plain_paths(tmp_path):
     py = tmp_path / "venv" / "Scripts" / "pythonw.exe"
     stub = tmp_path / "venv" / "Lib" / "site-packages" / "ibasho" / "stub.py"
-    cwd, value = launch.leap_command(py, stub)
+    cwd, value = launch.leap_command(py, stub, posix=False)
     assert cwd == py.parent and value == "pythonw.exe ../Lib/site-packages/ibasho/stub.py"
     cmd = launch.windows_cmdline(["C:/Program Files/Viewer/viewer.exe", "--leap", value, "--grid", "x", "--autologin"])
     args = args_after_exe(cmd)
@@ -82,18 +82,18 @@ def test_plain_paths(tmp_path):
 def test_spaces_in_the_stub_path(tmp_path):
     py = tmp_path / "a" / "Scripts" / "pythonw.exe"
     stub = tmp_path / "My Projects" / "ibasho" / "stub.py"
-    cwd, value = launch.leap_command(py, stub)
+    cwd, value = launch.leap_command(py, stub, posix=False)
     args = args_after_exe(launch.windows_cmdline(["v.exe", "--leap", value]))
     assert leap_tokens(args[1]) == ["pythonw.exe", "../../My Projects/ibasho/stub.py"]
 
 
 def test_quotes_are_refused():
     with pytest.raises(launch.LaunchError):
-        launch.leap_command(PureWindowsPath("C:/x/pythonw.exe"), PureWindowsPath("C:/o'neil/stub.py"))
+        launch.leap_command(PureWindowsPath("C:/x/pythonw.exe"), PureWindowsPath("C:/o'neil/stub.py"), posix=False)
     with pytest.raises(launch.LaunchError):
         launch.windows_cmdline(["v.exe", "--grid", "it's"])
 
 
 def test_value_never_reads_as_notation(tmp_path):
-    _, value = launch.leap_command(tmp_path / "pythonw.exe", tmp_path / "stub.py")
+    _, value = launch.leap_command(tmp_path / "pythonw.exe", tmp_path / "stub.py", posix=False)
     assert value[0] not in launch.NOTATION_STARTS

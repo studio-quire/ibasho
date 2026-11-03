@@ -19,7 +19,7 @@ import subprocess
 import sys
 import threading
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import psutil
 
@@ -227,7 +227,7 @@ def watch_armed(procs: list[psutil.Process]) -> bool:
             continue
         if "watch" not in args:
             continue
-        if any(Path(a).stem.lower() == "ibasho" or a == "ibasho" for a in args[:args.index("watch")]):
+        if any(PureWindowsPath(a).stem.lower() == "ibasho" for a in args[:args.index("watch")]):  # / or \
             return True
     return False
 

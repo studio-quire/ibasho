@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 11:50:22 +0000
+Subject: [PATCH 34/35] IbashoAgent people and parcel: who's in voice and
+ speaking
+
+While my own voice chat is connected, people marks the avatars in it
+(in_voice) and those speaking now (speaking), and parcel says whether my
+voice is connected (my_voice) beside the parcel's voice right.
+---
+ indra/newview/ibashoagent.cpp | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/indra/newview/ibashoagent.cpp b/indra/newview/ibashoagent.cpp
+index 4480fb2..166cdce 100644
+--- a/indra/newview/ibashoagent.cpp
++++ b/indra/newview/ibashoagent.cpp
+@@ -85,6 +85,7 @@
+ #include "llviewerobjectlist.h"
+ #include "llviewerparcelmgr.h"
+ #include "llviewerregion.h"
++#include "llvoiceclient.h"
+ #include "llvoavatarself.h"
+ #include "llworld.h"
+ #include "llworldmapmessage.h"
+@@ -1002,12 +1003,14 @@ public:
+             "Set home to the current location (the region replies with an alert).",
+             &IbashoAgentListener::setHome);
+         add("parcel",
+-            "Reply with the current parcel and region: name, desc, owner, area, flags, music/media, rights.",
++            "Reply with the current parcel and region: name, desc, owner, area, flags, music/media, rights;\n"
++            "my_voice: whether my own voice chat is connected (the parcel's \"voice\" right says if it's allowed).",
+             &IbashoAgentListener::parcel,
+             llsd::map("reply", LLSD()));
+         add("people",
+             "Reply [\"people\"]: avatars within [\"dist\"] m (default 64; region-wide coarse positions),\n"
+-            "nearest first: id, display_name, username, pos (region), dist, friend.",
++            "nearest first: id, display_name, username, pos (region), dist, friend; in_voice and speaking\n"
++            "(true only) while my own voice chat is connected.",
+             &IbashoAgentListener::people,
+             llsd::map("reply", LLSD()));
+         add("friends",
+@@ -1466,6 +1469,7 @@ private:
+             "for_sale", p->getForSale(),
+             "sale_price", p->getSalePrice(),
+             "allowed", flags);
++        response["my_voice"] = LLVoiceClient::instanceExists() && LLVoiceClient::getInstance()->isVoiceWorking();
+     }
+ 
+     void people(const LLSD& data)
+@@ -1476,6 +1480,9 @@ private:
+         std::vector<LLVector3d> positions;
+         LLVector3d me = gAgent.getPositionGlobal();
+         LLWorld::getInstance()->getAvatars(&ids, &positions, me, radius);
++        LLVoiceClient* voice = LLVoiceClient::instanceExists() ? LLVoiceClient::getInstance() : nullptr;
++        if (voice && !voice->isVoiceWorking())
++            voice = nullptr;
+         std::vector<std::pair<F64, LLSD>> found;
+         for (size_t i = 0; i < ids.size(); ++i)
+         {
+@@ -1485,6 +1492,12 @@ private:
+             LLSD entry = llsd::map("id", ids[i], "dist", d,
+                                    "pos", ll_sd_from_vector3(gAgent.getPosAgentFromGlobal(positions[i])),
+                                    "friend", LLAvatarTracker::instance().isBuddy(ids[i]));
++            if (voice && voice->isParticipant(ids[i]))
++            {
++                entry["in_voice"] = true;
++                if (voice->getIsSpeaking(ids[i]))
++                    entry["speaking"] = true;
++            }
+             LLSD name = nameSD(ids[i]);
+             if (name.isDefined())
+             {

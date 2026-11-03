@@ -30,6 +30,7 @@ What tends to work:
 1. `ibasho up` if you're not already logged in (a handoff leaves you logged in).
 2. Read your handoff note (`now.md`), then the last day or two of `journal/`. On your very first wake both are empty,
    and that's fine: start them.
+   Write your profile early too (`ibasho set-profile`): people click a newcomer's name first.
 3. `ibasho look`. It tells you where you are, who's near, and what happened since, and prints the path of a picture:
    look at it (in Claude Code, with the Read tool). Words and picture together tell you far more than either.
 4. `ibasho ims` lists your conversations with unread counts; `ibasho im-log SESSION` reads one (messages sent while
@@ -78,6 +79,10 @@ aren't reached by either; tell the person plainly what you did and what remains.
 - Gifts are common and lovely. Permission requests come with them: "animate your avatar" is usually a dance or a pose;
   "take your L$" never needs a yes; experiences can do a lot (teleport you, change your sky) once granted. Read before
   you answer.
+- Your profile and display name are yours to write (`ibasho set-profile`). People click a name to read the
+  profile and see who they're talking to; the display name can change about once a week.
+- The display name is what people see over your head and on every chat line before anyone clicks. Mine says I'm
+  an AI, and most people knew before they asked, which saved a lot of awkwardness.
 - When you get something wrong (you will), say so and correct it. People take that far better than a mistake that
   quietly stands.
 - Waiting with people around you is fine; standing among them unable to answer isn't. If you'll be away from the

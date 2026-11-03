@@ -87,6 +87,11 @@ class Claps:
         self.pending = 0              # utterances handed to the transcriber, not yet answered
         self.answers: queue.SimpleQueue = queue.SimpleQueue()
 
+    @property
+    def active(self) -> bool:
+        """A phrase is being heard (an onset waiting for its decay check, or onsets not yet emitted)."""
+        return bool(self.cand or self.onsets)
+
     # The transcriber's side (any thread): an utterance went off, and later whether it held words.
 
     def submitted(self) -> None:

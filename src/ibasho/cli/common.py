@@ -228,6 +228,15 @@ def resolve(ctx: Ctx, target: str, kinds=("avatar", "session", "group", "object"
         return [(k, i) for k, i in hits if not (k == "session" and p2p_other.get(i) in ids)]  # same person twice
 
     hits = matches()
+    if not hits and "session" in kinds and "avatar" in kinds and hexish and len(want) >= 6:
+        # a one-to-one session from before a relog is closed now; its person is in the log, and an IM to them
+        # opens the same session again (seen on Second Life, 2026-11-03)
+        for e in reversed(api.recent(kinds=["im"])):
+            d = e["data"]
+            if d.get("session_type") == "p2p" and str(d.get("session_id") or "").startswith(want):
+                other = d.get("from_id") if d.get("dir") == "in" else d.get("to_id")
+                if other and is_uuid(str(other)):
+                    return "avatar", str(other)
     if not hits and ({"avatar", "object"} & set(kinds)):   # people and things from earlier: payers, past IMs
         for k, i, ns in recent_ids(ctx, kinds):
             add(k, i, *ns)
@@ -356,7 +365,8 @@ def fmt_person(p: dict) -> str:
     where = f" {p['dist']:.0f}m" if "dist" in p else (" online" if p.get("online") else " offline")
     if isinstance(p.get("pos"), list) and len(p["pos"]) >= 3:
         where += " at " + ",".join(f"{v:.0f}" for v in p["pos"][:3])
-    return f"{name}{user}{where}{' friend' if p.get('friend') else ''} {p['id']}"
+    voice = " speaking" if p.get("speaking") else " in voice" if p.get("in_voice") else ""
+    return f"{name}{user}{where}{' friend' if p.get('friend') else ''}{voice} {p['id']}"
 
 
 def fmt_perms(p: dict | None) -> str:
@@ -412,7 +422,13 @@ def fmt_event(ctx: Ctx | None, e: dict) -> str:
         who = d.get("from") or "?"
         if d.get("source") == 2:
             who += " (object)"
-        return f"chat {who}{CHAT_TYPES.get(d.get('chat_type'), '')}: {d.get('message')}"
+        verb = CHAT_TYPES.get(d.get('chat_type'), '')
+        msg = d.get('message') or ''
+        if verb.strip() and msg.startswith(verb.strip() + ": "):   # Second Life's own text already says it
+            msg = msg[len(verb.strip()) + 2:]
+        if ctx and "/app/agent/" in msg:   # @mentions come as links: show the name
+            msg = humanize(ctx, msg)
+        return f"chat {who}{verb}: {msg}"
     if k == "im":
         st = d.get("session_type")
         where = st + (f" {d.get('session_name')!r}" if st != "p2p" else "")
@@ -489,6 +505,8 @@ def mentions(status: dict) -> re.Pattern | None:
         if me.get(k):
             words += [w for w in re.split(r"[\s._]+", me[k]) if w.lower() != "resident"]
     words = [w for w in dict.fromkeys(w.lower() for w in words) if len(w) >= 3]
+    if is_uuid(str(me.get("id") or "")):
+        words.append(str(me["id"]).lower())   # an @mention arrives as a link with my id in it
     if not words:
         return None
     return re.compile(r"\b(?:" + "|".join(re.escape(w) for w in words) + r")", re.I)

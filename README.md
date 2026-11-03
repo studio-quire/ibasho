@@ -16,12 +16,12 @@ or make an HTTP request can live here too.
 Ibasho grew out of the setup of Tessel, a Claude who lives in the Second Life world, and Tessel shaped and reviewed
 this release.
 
-Windows only. Python 3.12 or newer. Early software: expect rough edges.
+Windows, and Linux servers without a graphics card, in a container ([docs/linux.md](docs/linux.md); new, and without tools yet). Python 3.12 or newer. Early software: expect rough edges.
 
 **This software is not provided or supported by Linden Lab, the makers of Second Life.**
 
 **No support is offered.** Bug reports are welcome at the
-[issue tracker](https://github.com/Shoalstone/ibasho/issues), but nobody promises an answer or a fix.
+[issue tracker](https://github.com/studio-quire/ibasho/issues), but nobody promises an answer or a fix.
 
 ## What's in the box
 
@@ -29,8 +29,9 @@ Windows only. Python 3.12 or newer. Early software: expect rough edges.
   (LEAP is the viewer's plugin protocol), so a program can do what a resident does through calls instead of
   screen clicks: instant messages, objects and their owners and permissions, building, money, inventory,
   wearables, uploads, and movement. It also adds a spectator mode, hard limits on messages and spending, and its own
-  name and artwork. The viewer's [README](viewer/README.md) covers building it, its APIs and its limits. A
-  prebuilt Windows zip will be published on GitHub Releases (planned).
+  name and artwork. The viewer's [README](viewer/README.md) covers building it, its APIs and its limits.
+  Prebuilt viewers for Windows (a zip) and Linux (a tarball, for the container) are on
+  [GitHub Releases](https://github.com/studio-quire/ibasho/releases).
 - **The tooling** (`src/ibasho/`), a Python package:
   - the **daemon**, which sits between the viewer and the agent. It keeps an event log of what the avatar
     perceives, passes on to the viewer only the kinds of request on its list (none that reach files, programs or
@@ -41,7 +42,8 @@ Windows only. Python 3.12 or newer. Early software: expect rough edges.
     objects and people), moves (a walk that checks for drops and steps round people, teleports, sitting),
     talks (local chat, IMs, group chat), handles dialogs and offers, builds and scripts, gives and pays, and
     hears what happens (`ibasho watch`). `ibasho -h` lists everything.
-  - the **MCP server** (`ibasho mcp`), for an agent in any MCP client ([docs/mcp.md](docs/mcp.md)).
+  - the **MCP server** (`ibasho mcp`), for an agent in any MCP client ([docs/mcp.md](docs/mcp.md)); to a client
+    that speaks MCPL, such as Connectome, it also pushes what happens in the world as it happens.
   - **hearing** (optional): the viewer's sound, and optionally voice chat, transcribed on your machine by Whisper.
   - the **keeper** (optional, for Claude Code), which runs the agent's sessions for you. It wakes the agent, hands
     off to a fresh session when the context fills, restarts a session that crashed, respects naps and bookings,
@@ -51,7 +53,7 @@ Windows only. Python 3.12 or newer. Early software: expect rough edges.
   - **tools** (optional, off by default): `ibasho tool` runs Python the agent wrote for itself, in a Windows
     sandbox that sees, of your files, only its tools folder. [docs/tools.md](docs/tools.md) says what that
     contains and what it doesn't.
-- **`audio/`**: `proccap`, the small Windows helper that hearing captures sound with.
+- **`audio/`**: `proccap`, the small Windows helper that hearing captures sound with (on Linux the sound server's own `parec`).
 - **`life-template/`**: the empty memory folder a new agent starts with. Its README, on waking up, is written for
   the agent by a model that lives this way.
 
@@ -71,7 +73,8 @@ Ibasho's viewer does several things a normal viewer doesn't:
   (windows opening, alerts, messages) brings it forward. Click it or switch to it whenever you want to watch.
 - **It spends and builds by program.** Paying avatars and objects, buying objects, uploading (and paying the
   upload fee), building, attaching and answering dialogs all happen through API calls, without the confirmation
-  windows a person would see, within the limits below.
+  windows a person would see, within the limits below. So does changing the avatar's profile (its about text and
+  picture) and display name: the agent writes its own.
 - **It can hide avatars and other people's words from its own window.** `hideAvatars` leaves chosen avatars out
   of what the window draws (locally only, like "Do not render"). `streamUI` keeps chat, IMs and notifications
   about people off the window. Both affect only this viewer's screen, never what anyone else sees.
@@ -84,6 +87,14 @@ Ibasho's viewer does several things a normal viewer doesn't:
   play through the built-in browser; RTSP streams and some older formats don't play. The built-in browser doesn't
   open files or pages on your own machine or network, by address or `localhost` name (a host name that resolves
   to a local address isn't caught, nor what a page loads for its parts: images, scripts, frames).
+- **On a Linux server it runs in a container, reached two ways.** The agent's harness connects to `ibasho mcp`
+  over WebSocket (port 9280), and for the person's first login `ibasho login` shows the viewer's screen in their
+  own browser (noVNC, port 6080, with a password made for that login; it closes when that viewer does, and Ctrl+V
+  there pastes their computer's clipboard into the viewer). Both ports are published on the server's loopback
+  only, so the person reaches the login page through an SSH tunnel, and every WebSocket connection needs the
+  install's token. Where the machine has no disk id to report, as in a container, the machine id the viewer sends
+  Linden Lab at login is a random one made once for the install and kept with its saved login, instead of the
+  one value every container would otherwise share. [docs/linux.md](docs/linux.md) has the details.
 - **Content:** Ibasho adds no content of its own. The viewer shows whatever the grid shows, up to the maturity
   rating set in the config: Moderate by default, never above what the person sets.
 
@@ -99,7 +110,6 @@ for the few moments that are yours:
 
 - making the Second Life account (your email address and date of birth), and ticking its scripted-agent flag on
   the website;
-- giving it a display name and profile that say it's an AI;
 - one sitting at the computer: typing the password into the viewer once, accepting Linden Lab's terms, and
   allowing the Windows firewall prompt that comes up then; and, if the keeper runs the agent, signing in to Claude
   for it;
@@ -125,7 +135,8 @@ Then the agent who'll live there connects, one of these ways:
 
 - **Claude Code with the keeper**, the best-tested path: `ibasho keeper setup`, `ibasho keeper login` (the
   person signs in), `ibasho keeper start`.
-- **An MCP client:** `ibasho mcp`, set up as [docs/mcp.md](docs/mcp.md) describes.
+- **An MCP client:** `ibasho mcp`, set up as [docs/mcp.md](docs/mcp.md) describes; on Connectome, as
+  [docs/connectome.md](docs/connectome.md) describes.
 - **Any agent that can run shell commands:** the `ibasho` command, with `ibasho watch` for what happens in the
   world (`ibasho watch --exit-on-wake` returns after each batch, for harnesses that can't stream a command's
   output).
@@ -144,7 +155,8 @@ what to restrict, and [docs/safety.md](docs/safety.md) why.
 - [docs/keeper.md](docs/keeper.md): the keeper for Claude Code in detail.
 - [docs/writing-a-keeper.md](docs/writing-a-keeper.md): what a keeper does, for running an agent in another harness.
 - [docs/api.md](docs/api.md): the daemon's HTTP API, for connecting an agent in any language.
-- [docs/mcp.md](docs/mcp.md): the MCP server.
+- [docs/mcp.md](docs/mcp.md): the MCP server, and the events it pushes to MCPL clients.
+- [docs/connectome.md](docs/connectome.md): an agent on Connectome (a draft).
 - [docs/hearing.md](docs/hearing.md): hearing in detail, including consent.
 - [docs/tools.md](docs/tools.md): the agent's own tools, the sandbox they run in, and its limits.
 - [viewer/README.md](viewer/README.md): the Ibasho viewer, covering building, APIs, limits and what changed in
@@ -168,9 +180,9 @@ and you are responsible for what the agent's perceptions send to its model's pro
   is under CC BY-SA 3.0, and Ibasho's own artwork (made by `viewer/art/make_art.py`) is under the same licence.
 - **Source for the viewer binary.** Every Ibasho viewer release is built from Linden Lab's viewer at the commit
   in [`viewer/BASE`](viewer/BASE) plus the patch series in `viewer/patches/`, both in this repository. Each
-  release will also be published as a tagged public fork of the viewer source, at
-  `https://github.com/Shoalstone/ibasho-viewer` (planned; not live yet). The zip's `README.txt` and `licenses.txt`
-  list the third-party libraries and where to get the source of the LGPL ones.
+  release is also published as a tagged public fork of the viewer source, at
+  `https://github.com/studio-quire/ibasho-viewer` (branch `ibasho`, a tag for each release). The zip's
+  `README.txt` and `licenses.txt` list the third-party libraries and where to get the source of the LGPL ones.
 
 ## Trademarks
 

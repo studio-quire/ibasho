@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import sys
 import math
 import time
 
@@ -64,6 +65,7 @@ def test_message_cap_must_leave_a_margin(home):
 
 def test_viewer_folders(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setattr(sys, "platform", "win32")   # Windows' folders (test_linux.py has Linux's)
 
     def cfg(**kw):
         return config_mod.Config(path=tmp_path / "config.toml", name="A", **kw)
@@ -81,6 +83,7 @@ def test_viewer_folders(tmp_path, monkeypatch):
 def test_other_grid_goes_into_the_viewers_grids_xml(tmp_path, monkeypatch):
     import llsd
     monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("IBASHO_USER_DIR", str(tmp_path / "Ibasho"))
     p = config_mod.write_template(tmp_path / "config.toml", name="A", grid="http://127.0.0.1:9000/",
                                   viewer="C:/Ibasho/IbashoViewer.exe")
     c = config_mod.load(p)

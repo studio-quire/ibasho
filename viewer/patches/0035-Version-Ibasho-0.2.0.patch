@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Tue, 3 Nov 2026 11:51:03 +0000
+Subject: [PATCH 35/35] Version: Ibasho 0.2.0
+
+---
+ doc/IBASHO-CHANGES.txt           | 3 ++-
+ indra/newview/VIEWER_VERSION.txt | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/doc/IBASHO-CHANGES.txt b/doc/IBASHO-CHANGES.txt
+index 23cecfe..553bc93 100644
+--- a/doc/IBASHO-CHANGES.txt
++++ b/doc/IBASHO-CHANGES.txt
+@@ -35,7 +35,8 @@ indra/newview/CMakeLists.txt
+     Modified for Ibasho (2026-10-10, 2026-10-22, 2026-10-23, 2026-11-02): builds the Ibasho LEAP
+     API files; the viewer doesn't depend on the LibVLC or example media plugins.
+ indra/newview/VIEWER_VERSION.txt
+-    Modified for Ibasho (2026-10-22): Ibasho's own version number (a data file read by CMake).
++    Modified for Ibasho (2026-10-22, 2026-11-03): Ibasho's own version number (a data file read by
++    CMake).
+ indra/newview/app_settings/settings.xml
+     Modified for Ibasho (2026-10-10, 2026-10-11, 2026-10-22, 2026-10-23, 2026-11-02, 2026-11-03):
+     settings for the Ibasho LEAP APIs and limits (IbashoMaxPayment, IbashoMaxSessionSpend,
+diff --git a/indra/newview/VIEWER_VERSION.txt b/indra/newview/VIEWER_VERSION.txt
+index 6e8bf73..0ea3a94 100644
+--- a/indra/newview/VIEWER_VERSION.txt
++++ b/indra/newview/VIEWER_VERSION.txt
+@@ -1 +1 @@
+-0.1.0
++0.2.0

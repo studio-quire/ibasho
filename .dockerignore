@@ -1,0 +1,11 @@
+# docker build -f docker/Dockerfile . : only what the image needs
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!src
+!life-template
+!docker
+docker/compose.yaml
+**/__pycache__
+**/*.pyc

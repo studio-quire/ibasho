@@ -16,9 +16,11 @@ file. Read [Privacy and consent](#privacy-and-consent) first.
 
 ## What it hears
 
-- **The viewer's own sound, and nothing else on the machine.** `proccap.exe` uses Windows' process loopback
-  capture (Windows 10 version 2004 or later) on the viewer's process tree: the world's sounds, gestures, media
-  on prims, the viewer's music. Not your browser, your calls, or anything else playing.
+- **The viewer's own sound, and nothing else on the machine.** On Windows, `proccap.exe` uses Windows' process
+  loopback capture (Windows 10 version 2004 or later) on the viewer's process tree: the world's sounds, gestures,
+  media on prims, the viewer's music. Not your browser, your calls, or anything else playing. On Linux (the
+  container, [linux.md](linux.md)) the viewer plays on a sound-server sink of its own, `ibasho_world`, and hearing
+  records only that sink.
 - **The parcel's music stream, if you turn it on** (`follow_music`, off by default): Ibasho fetches the stream
   itself and transcribes the talk in it in overlapping 12-second windows, as `heard_stream` events. DJs talk over
   their sets, sometimes to you; lyrics come through too, so these wake the model only when its name comes up.
@@ -53,7 +55,7 @@ prompt primes Whisper with the name, since that makes it hear the name in music 
 
 ## Turning it on
 
-For the person running the agent:
+For the person running the agent, on Windows (Linux: [below](#on-linux)):
 
 1. Install the extra packages: `pip install ".[hearing]"` in the Ibasho folder (faster-whisper, which brings PyAV and
    onnxruntime, and numpy). PyAV stays below 19, which broke faster-whisper's own audio decoding.
@@ -64,7 +66,7 @@ For the person running the agent:
    without Visual Studio.
 3. In the config's `[hearing]` table set `enabled = true`, and look over the rest (below).
 4. Run `ibasho hear setup`: it checks Windows, proccap and the packages, downloads the model into
-   `%IBASHO_HOME%\models` (small.en is about 480 MB), and checks the voice device if one is set. Hearing never
+   `%IBASHO_HOME%\models` (small.en, the model on most machines, is about 480 MB), and checks the voice device if one is set. Hearing never
    needs the network after that, except to follow music streams.
 5. `ibasho up` starts hearing once the avatar is in world; `ibasho down` stops it.
 
@@ -76,6 +78,48 @@ to choose, in `hearing.model`.
 
 To check the install without the viewer: `ibasho hear run --file some-recording.wav` prints what it hears.
 
+### On Linux
+
+The container ([linux.md](linux.md)) has everything hearing needs: the packages, and a sound server of its own
+(PulseAudio) whose outputs are all silent sinks that nothing outside the container hears. Then:
+
+1. In the config's `[hearing]` table set `enabled = true`, and look over the rest (the model: below).
+2. `docker exec ibasho ibasho hear setup` downloads the model into the volume (the container needs the internet
+   for this, once) and checks the sound server.
+3. `ibasho up` starts hearing, as on Windows.
+
+Outside the container, Linux needs PulseAudio (or PipeWire's pulse server) with `pactl` and `parec`, and a null
+sink named `ibasho_world` (`pactl load-module module-null-sink sink_name=ibasho_world`) that the viewer plays on
+(as its default sink, or `PULSE_SINK=ibasho_world` in `ibasho up`'s environment); `docker/pulse.pa` shows the
+container's sinks. Only the container has been tested.
+
+### How much CPU it takes on a small server
+
+Listening costs almost nothing: the sound server, the capture and the cutter take about 0.05 of a core together,
+and the viewer keeps its idle frame rate while nothing is heard. Transcribing is the cost, and only while people
+talk. Measured in the container on a private test grid, 2 CPUs, utterances of 3-6 seconds, Whisper at reduced
+priority with one thread:
+
+| | tiny.en | base.en | small.en |
+|---|---|---|---|
+| a 5-second utterance, the viewer idle | 0.7 s | 1.3 s | 3.2 s |
+| the same, the viewer drawing flat out | 0.8 s | 1.3 s | 3.4 s |
+| the same on the slow-VPS stand-in (below), viewer idle | | 2.4 s (3.5 at most) | 6.4 s (7.5) |
+| CPU seconds per second of speech | 0.11 | 0.18 | 0.43 |
+| memory | 0.2 GB | 0.25 GB | 0.5 GB |
+
+The test machine's cores (a Ryzen 9600X) are roughly 1.5-2 times a typical VPS's vCPUs, so the slow-VPS stand-in
+gave the container one CPU's worth of time over two. While Whisper works, it takes about a third of the viewer's
+frame rate when the viewer is drawing flat out (7.5 to 5 frames a second); it draws flat out only while the
+agent is acting. A second thread on 2 CPUs gained nothing while the viewer was busy and cost it more frames. With 4 CPUs, small.en took 2.7 s (two threads, the viewer idle) and
+about 5 s while the viewer drew flat out.
+
+So `model` and `threads` follow the machine: on fewer than 4 CPUs base.en with one thread, since small.en there
+takes longer than the speech itself and would fall behind in a lively conversation (hearing then skips
+utterances rather than lag); with 4 or more, small.en, which mishears less. A container's CPU quota counts, not
+the host's cores. The clean test speech came through nearly word for word with every model, so it says nothing
+about how much more the smaller ones mishear real voices.
+
 ## Settings
 
 All in the `[hearing]` table of `config.toml`:
@@ -83,17 +127,17 @@ All in the `[hearing]` table of `config.toml`:
 | setting | default | |
 |---|---|---|
 | `enabled` | `false` | `ibasho up` starts hearing; `ibasho hear on` works at all |
-| `model` | `"small.en"` | `tiny.en` (~75 MB) and `base.en` (~145 MB) are lighter and miss more; `medium.en` (~1.5 GB) is better and much slower. Without `.en`, multilingual |
+| `model` | `""` | empty: `small.en` (~480 MB) with 4 CPUs or more, `base.en` (~145 MB) with fewer, where small.en can't keep up beside the viewer ([below](#how-much-cpu-it-takes-on-a-small-server)). `tiny.en` (~75 MB) is lighter and misses more; `medium.en` (~1.5 GB) is better and much slower. Without `.en`, multilingual |
 | `language` | `""` | multilingual models: a language code such as `"de"`, or empty to detect |
-| `threads` | `0` | CPU threads for Whisper; 0 = half the cores, at most 4 |
+| `threads` | `0` | CPU threads for Whisper; 0 = half the CPUs (a container's CPU quota where it has one), at most 4 |
 | `retention_days` | `2` | heard events are deleted after this many days (fractions work: `0.5` is 12 hours) |
 | `follow_music` | `false` | transcribe the parcel's music stream (a steady CPU load while one plays) |
-| `mute_viewer_music` | `true` | the viewer's music volume to 0 while hearing (back up in the viewer's Preferences > Sound & Media if you use the viewer yourself) |
+| `mute_viewer_music` | `true` | the viewer's music volume to 0 while hearing (back up in the viewer's Preferences > Sound & Media if you use the viewer yourself); on a server (`[server]`), the viewer doesn't play the parcel's music stream at all |
 | `claps` | `true` | rhythm events |
 | `heard_as` | `[]` | mishearings of the avatar's name that should count as the name |
 | `gate_db` | `-45.0` | how loud (dBFS) a sound must be to count as an utterance |
 | `voice_device` | `""` | voice chat capture, opt-in: below |
-| `proccap` | `""` | the exe's path, if it isn't in `%IBASHO_HOME%\bin` or on PATH |
+| `proccap` | `""` | Windows: the exe's path, if it isn't in `%IBASHO_HOME%\bin` or on PATH |
 
 The hearing process runs at below-normal priority and transcribes one thing at a time, speech before music. If
 it falls behind (a slow CPU, a long set of music), it skips new utterances rather than lag further. Whisper
@@ -120,6 +164,21 @@ hearing records everything on that device. That's why it's opt-in, and why the c
 While voice capture is on, hearing sets the viewer's voice output (`VoiceOutputAudioDevice`) to that device and
 keeps it there, so you won't hear voice chat on your speakers. To undo it: empty `voice_device`, then pick your
 speakers again in the viewer's voice device settings.
+
+**On Linux** (the container), the spare device is already there: voice plays on a sink of its own,
+`ibasho_voice`, which nothing else uses.
+
+1. In the config's `[server]` table set `voice = true`: the viewer then joins voice chat. It's off on servers by
+   default, since without step 2 nothing is heard (in a quiet voice channel it took no CPU we could measure; a
+   channel full of talkers is untested). `ibasho up` points the viewer's voice output at `ibasho_voice`, so
+   voice never mixes into the sound the viewer ear records, whatever hearing's settings.
+2. In `[hearing]` set `voice_device = "ibasho_voice"`, then `ibasho hear setup` to check.
+
+While hearing runs, it also moves any voice stream it finds on `ibasho_world` back to `ibasho_voice` (should the
+viewer's voice output be changed), so voice is heard only through this opt-in. Tested on a private OpenSim grid
+with WebRTC voice (OpenSim's Janus voice module): voice chat came through as `heard` events with `via: voice`.
+On Second Life's own voice servers it worked the same (2026-11-03): real voices nearby came through as `heard`
+lines in about 1.3 s each with small.en on 4 CPUs.
 
 The agent hears voice the way a person in the room would; it doesn't speak in voice (Ibasho has no voice output).
 
@@ -149,10 +208,11 @@ What hearing produces is the most sensitive data Ibasho handles: other people's 
 
 ## How it fits together
 
-- `audio/proccap.cpp`, `audio/build.bat`: the capture helper. `proccap <pid>` captures one process tree;
-  `proccap --device <id>` one output device (refusing defaults, exit code 3); `proccap --list` lists output
-  devices. Raw 16-bit PCM on stdout, real-time silence included.
-- `src/ibasho/hearing/`: `settings.py` (the config table), `capture.py` (runs proccap), `audio.py` (the utterance
+- `audio/proccap.cpp`, `audio/build.bat`: the capture helper on Windows. `proccap <pid>` captures one process
+  tree; `proccap --device <id>` one output device (refusing defaults, exit code 3); `proccap --list` lists output
+  devices. Raw 16-bit PCM on stdout, real-time silence included. On Linux, `parec` records a sink's monitor in the
+  same format and `pactl` lists the sinks; `docker/pulse.pa` is the container's sound server.
+- `src/ibasho/hearing/`: `settings.py` (the config table), `capture.py` (runs proccap or parec), `audio.py` (the utterance
   cutter and the clap ear), `music.py` (stream following), `ears.py` (the process: `ibasho hear run`).
 - `src/ibasho/cli/ears.py`: `ibasho hear on|off|status|setup|devices|forget|run` and `ibasho clap`.
 - Events go to the daemon's `POST /event`; forgetting uses `POST /forget {kinds, after}`.

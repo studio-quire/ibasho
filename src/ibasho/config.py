@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import time
 import tomllib
 from dataclasses import dataclass, field
@@ -21,6 +22,9 @@ LINDEN_GRIDS = {
 }
 
 MATURITY = {"general": 13, "moderate": 21, "adult": 42}  # the viewer's PreferredMaturity values
+
+# The Ibasho viewer, by the name of the file viewer.path points at: Windows' exe; Linux's start script or binary
+IBASHO_VIEWER_NAMES = ("ibashoviewer.exe", "ibasho-viewer", "ibasho-viewer-bin")
 
 
 class ConfigError(Exception):
@@ -54,6 +58,30 @@ class Caps:
 
 
 @dataclass
+class Server:
+    """Running the viewer without a graphics card (Mesa's software renderer, a virtual display): on by default off
+    Windows. The Ibasho viewer's settings for it go on its command line or, once in world, over LEAP (the viewer's
+    graphics presets override several settings given on the command line)."""
+    enabled: bool = sys.platform != "win32"
+    window: str = "800x600"          # the viewer's window: drawing time grows with its pixels
+    max_fps: float = 15.0            # frames a second at most (0 = no cap); software drawing takes every core
+    idle_fps: float = 2.0            # ... while nothing has asked the viewer anything for idle_after seconds
+    idle_after: float = 5.0
+    web: bool = False                # the viewer's web browser (CEF): web pages, web floaters, media on prims
+    voice: bool = False              # voice chat; needs a sound server (WebRTC voice stops the viewer without one)
+    texture_budget_mb: int = 512     # as the viewer counts it (about twice the bytes); 0 = the viewer's own
+    max_texture_size: int = 1024     # 512, 1024 or 2048: the largest texture size downloaded
+    trim_memory: float = 60.0        # Linux: give freed memory back to the system every so many seconds; 0 = never
+    draw_distance: int = 64          # metres
+    avatar_impostors: int = 6        # avatars drawn in full; the rest as flat impostors, redrawn now and then
+    avatar_max_complexity: int = 0   # avatars above this complexity drawn as plain shapes; 0 = no limit
+
+    def window_size(self) -> tuple[int, int]:
+        w, _, h = self.window.lower().partition("x")
+        return int(w), int(h)
+
+
+@dataclass
 class Config:
     path: Path
     name: str = ""
@@ -71,6 +99,7 @@ class Config:
     retention_days: int = 7
     probe_channel: int = 0
     caps: Caps = field(default_factory=Caps)
+    server: Server = field(default_factory=Server)
     policy_allow: list[str] = field(default_factory=list)   # the person's additions to the daemon's allowlist
 
     # ---- derived ----
@@ -118,14 +147,19 @@ class Config:
 
     @property
     def ibasho_viewer(self) -> bool:
-        """The configured viewer is an Ibasho build (by its exe's name; an empty path means the Ibasho viewer)."""
-        return not self.viewer_path or Path(self.viewer_path).name.lower() == "ibashoviewer.exe"
+        """The configured viewer is an Ibasho build (by its exe's name, or on Linux its binary's or start script's;
+        an empty path means the Ibasho viewer)."""
+        return not self.viewer_path or Path(self.viewer_path).name.lower() in IBASHO_VIEWER_NAMES
 
     def viewer_dirs(self) -> list[Path]:
         """Where the viewer keeps per-user files (settings, saved login, per-account transcripts): the configured
-        dir, else the Ibasho viewer's own %APPDATA%\\Ibasho, or %APPDATA%\\SecondLife for Linden Lab's viewer."""
+        dir, else the Ibasho viewer's own (%APPDATA%\\Ibasho on Windows; on Linux ~/.ibasho, or IBASHO_USER_DIR if
+        set, as the viewer reads it), or Linden Lab's viewer's (%APPDATA%\\SecondLife, ~/.secondlife)."""
         if self.viewer_user_dir:
             return [Path(self.viewer_user_dir)]
+        if sys.platform != "win32":
+            own = os.environ.get("IBASHO_USER_DIR" if self.ibasho_viewer else "SECONDLIFE_USER_DIR")
+            return [Path(own) if own else Path.home() / (".ibasho" if self.ibasho_viewer else ".secondlife")]
         appdata = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
         return [appdata / ("Ibasho" if self.ibasho_viewer else "SecondLife")]
 
@@ -261,8 +295,11 @@ def config_path(path: Path | str | None = None) -> Path:
 
 
 def sessions_dir() -> Path:
-    """Which config each agent session runs with (`session_config_problem`): per Windows user, outside every
-    install, beside the Ibasho viewer's cache."""
+    """Which config each agent session runs with (`session_config_problem`): per user, outside every install
+    (beside the Ibasho viewer's cache on Windows, in the XDG state folder elsewhere)."""
+    if sys.platform != "win32":
+        state = os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state"
+        return Path(state) / "ibasho" / "sessions"
     return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Ibasho" / "sessions"
 
 
@@ -354,6 +391,13 @@ def load(path: Path | None = None) -> Config:
     defaults = Caps()
     for k in vars(defaults):
         setattr(c.caps, k, _get(caps, k, type(getattr(defaults, k)), getattr(defaults, k)))
+    server, sdefaults = raw.get("server", {}), Server()
+    if not isinstance(server, dict) or (unknown := set(server) - set(vars(sdefaults))):
+        raise ConfigError(f"[server]: unknown keys {sorted(unknown) if isinstance(server, dict) else server!r}")
+    for k, v in vars(sdefaults).items():
+        if k in server and isinstance(v, float) and isinstance(server[k], int) and not isinstance(server[k], bool):
+            server[k] = float(server[k])
+        setattr(c.server, k, _get(server, k, type(v), v))
     validate(c)
     return c
 
@@ -375,6 +419,14 @@ def validate(c: Config):
                           "e.g. " + c.grid.replace(":", "-"))
     if c.login_uri and not re.match(r"https?://[^/\s]+", c.login_uri):
         raise ConfigError("grid.login_uri must be an http(s) URL, e.g. http://127.0.0.1:9000/")
+    if not re.fullmatch(r"\d{3,4}x\d{3,4}", c.server.window.lower()):
+        raise ConfigError("server.window must be WIDTHxHEIGHT, e.g. \"800x600\"")
+    if c.server.max_texture_size not in (512, 1024, 2048):
+        raise ConfigError("server.max_texture_size must be 512, 1024 or 2048")
+    for k in ("max_fps", "idle_fps", "idle_after", "texture_budget_mb", "draw_distance", "avatar_impostors",
+              "avatar_max_complexity", "trim_memory"):
+        if getattr(c.server, k) < 0:
+            raise ConfigError(f"server.{k} can't be negative")
     if len({c.leap_port, c.http_port, c.editor_port}) < 3:
         raise ConfigError("ports.leap, ports.http and ports.editor must differ")
     if c.retention_days < 1:
@@ -454,14 +506,35 @@ allow = []
 # (lsl/probe_attachment.lsl). 0 = none.
 attachment_channel = 0
 
+[server]
+# For a machine without a graphics card, where the viewer draws in software (Linux servers and the container):
+# on by default off Windows. Drawing takes every core it's given, so the frame rate is capped, and lower still
+# while nothing is asking the viewer anything; the first request after a quiet spell waits for one idle frame.
+#enabled = true
+#window = "800x600"        # the viewer's window (and pictures' default size); drawing time grows with its pixels
+#max_fps = 15
+#idle_fps = 2              # after idle_after seconds without a request (not while walking or teleporting)
+#idle_after = 5
+#web = false               # the viewer's web browser (web pages, web floaters, web media on prims): ~0.5 GB
+#voice = false             # voice chat (the container's sound server plays it on a sink of its own); to
+                           # hear it as well, hearing.voice_device below
+#texture_budget_mb = 512   # texture memory, as the viewer counts it (about twice the bytes); 0 = the viewer's own
+#max_texture_size = 1024   # 512, 1024 or 2048
+#trim_memory = 60          # seconds: how often the viewer gives memory it has freed back (Linux); 0 = never
+#draw_distance = 64        # metres
+#avatar_impostors = 6      # avatars drawn in full; the rest as flat pictures of themselves, redrawn now and then
+#avatar_max_complexity = 0 # avatars above this complexity drawn as plain shapes; 0 = no limit
+
 [hearing]
 # Hearing: the viewer's sound (and only the viewer's) transcribed on this machine by Whisper into `heard`
-# events. Off by default: it needs `pip install ".[hearing]"` (in the Ibasho folder), proccap.exe
-# (audio\\build.bat), a model download (~500 MB for small.en; `ibasho hear setup`) and a steady share of the CPU.
+# events. Off by default: it needs `pip install ".[hearing]"` (in the Ibasho folder), on Windows proccap.exe
+# (audio\\build.bat; the container on Linux has what it needs), a model download (~500 MB for small.en;
+# `ibasho hear setup`) and a steady share of the CPU.
 # What it hears is other people talking: it's kept only in the event log, for retention_days below
 # (`ibasho hear forget` clears it sooner), and the model reads it. Read docs/hearing.md before turning it on.
 enabled = false
-model = "small.en"        # tiny.en / base.en are lighter and miss more; medium.en is better and slower
+model = ""                # "" = small.en with 4 CPUs or more, base.en with fewer; tiny.en is lighter still and
+                          # misses more, medium.en better and much slower
 threads = 0               # Whisper's CPU threads; 0 = half the cores, at most 4
 retention_days = 2        # heard speech is deleted after this many days (shorter than the rest of the event log)
 follow_music = false      # also transcribe the parcel's music stream (DJs talk over it): keeps Whisper busy
@@ -471,10 +544,10 @@ claps = true              # claps and knocks as rhythm events
 heard_as = []             # how Whisper tends to mishear the avatar's name, e.g. ["Avery", "Ivory"]
 # Voice chat: opt-in, off while empty. Second Life voice isn't part of the viewer's own sound, so hearing it
 # means playing it on an output device nothing else uses and recording that whole device: set this to a
-# spare device's name or id from `ibasho hear devices` (a virtual audio cable, an unused output). Devices that
-# are a Windows default output are refused, since recording one would capture everything this machine plays
-# (your own calls included). Recording people's voices has legal and community-standards sides: see
-# docs/hearing.md first.
+# spare device's name or id from `ibasho hear devices` (a virtual audio cable, an unused output; in the Linux
+# container, "ibasho_voice", with [server] voice on). Devices that are a default output are refused, since
+# recording one would capture everything this machine plays (your own calls included). Recording people's voices
+# has legal and community-standards sides: see docs/hearing.md first.
 voice_device = ""
 
 [keeper]

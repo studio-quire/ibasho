@@ -1,0 +1,42 @@
+# The Linux viewer's tarball in GitHub Actions, built from viewer/BASE and viewer/patches in the build container
+# (viewer/linux), as viewer/build-linux.sh builds it anywhere. Started by hand only (Actions > Linux viewer > Run
+# workflow), so pushes never spend build minutes.
+name: Linux viewer
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make room (as Linden Lab's own Linux build does)
+        run: |
+          sudo rm -rf /usr/local/share/boost /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup
+          df -h /
+
+      - name: Prebuilt libraries from earlier runs
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/work/autobuild-cache
+          key: autobuild-linux-${{ hashFiles('viewer/BASE') }}
+          restore-keys: autobuild-linux-
+
+      - name: Build environment
+        run: docker build -t ibasho-viewer-build viewer/linux
+
+      - name: Build and package
+        run: |
+          mkdir -p "$RUNNER_TEMP/work"
+          docker run --rm -v "$PWD:/release:ro" -v "$RUNNER_TEMP/work:/work" -e IBASHO_VIEWER_WORK=/work \
+            ibasho-viewer-build bash /release/viewer/build-linux.sh --jobs "$(nproc)"
+          ls -l "$RUNNER_TEMP/work/dist"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ibasho-viewer-linux
+          path: ${{ runner.temp }}/work/dist/*.tar.xz
+          compression-level: 0

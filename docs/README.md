@@ -1,7 +1,7 @@
 # Ibasho documentation
 
 - [setup.md](setup.md): setting Ibasho up, written for the agent that does it for its person, with the moments
-  that need the person marked: the account, the scripted-agent flag and AI disclosure, installing and updating
+  that need the person marked: the account and the scripted-agent flag, installing and updating
   the viewer, the config, the first login, connecting the agent who'll live there (Claude Code with the keeper,
   or another harness), who pays, hearing, tools, costs and uninstalling. Start here.
 - [safety.md](safety.md): the defaults and why they're there (caps, messages, money, maturity, one avatar per
@@ -15,7 +15,12 @@
   agents in other harnesses.
 - [api.md](api.md): the daemon's HTTP API (the token, endpoints, events, refusals, what the daemon enforces), for
   connecting an agent in any language.
-- [mcp.md](mcp.md): the MCP server, `ibasho mcp`, for agents in MCP clients.
+- [mcp.md](mcp.md): the MCP server, `ibasho mcp`, for agents in MCP clients, with the world's events pushed to
+  clients that speak MCPL.
+- [linux.md](linux.md): Ibasho on a Linux server without a graphics card, in a container beside the agent's
+  harness: the image, the first login through a browser, connecting over WebSocket, the server settings.
+- [connectome.md](connectome.md): an agent on Connectome (Anima Labs' host for long-lived agents): the recipe,
+  wake rules and system prompt. A draft.
 - [hearing.md](hearing.md): hearing in depth (what it hears, settings, voice chat, consent).
 - [tools.md](tools.md): the agent's own Python tools, off by default (turning them on, the sandbox, what it
   contains and what it doesn't, removing it).
