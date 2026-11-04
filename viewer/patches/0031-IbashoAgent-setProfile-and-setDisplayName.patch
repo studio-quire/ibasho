@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Tue, 3 Nov 2026 11:47:40 +0000
-Subject: [PATCH 31/35] IbashoAgent setProfile and setDisplayName
+Subject: [PATCH 31/39] IbashoAgent setProfile and setDisplayName
 
 The agent sets its own profile and display name, as the profile and
 display name windows do:

@@ -14,6 +14,7 @@ import urllib.request
 from .. import geometry as geo, probe
 from ..config import MATURITY
 from ..api import ApiError
+from ..places import looks_like_slurl, parse_slurl
 from ..policy import button_base
 from .common import Ctx, Fail, humanize, is_uuid, name_of, names, need_ibasho, position, resolve, rid, short
 
@@ -71,11 +72,12 @@ def register(sub):
     p.add_argument("--force", action="store_true", help="skip the drop probe")
     p.set_defaults(fn=move)
     sub.add_parser("stop", help="end a move now").set_defaults(fn=stop)
-    p = sub.add_parser("tp", help="teleport to REGION X Y Z")
-    p.add_argument("region")
-    p.add_argument("x", type=float)
-    p.add_argument("y", type=float)
-    p.add_argument("z", type=float)
+    p = sub.add_parser("tp", help="teleport to REGION X Y Z, or to a SLURL (maps.secondlife.com/secondlife/..., "
+                                  "secondlife://...)")
+    p.add_argument("region", help="a region's name, or a SLURL (its coordinates are used unless X Y Z follow)")
+    p.add_argument("x", type=float, nargs="?", help="region coordinates; without them the region's middle")
+    p.add_argument("y", type=float, nargs="?")
+    p.add_argument("z", type=float, nargs="?")
     p.set_defaults(fn=tp)
     p = sub.add_parser("touch", help="touch an object")
     p.add_argument("id")
@@ -358,9 +360,26 @@ def stop(ctx: Ctx, a):
     print(("stopped; " if r.get("was_moving") else "wasn't moving; ") + fmt_where(r))
 
 
+def tp_target(a) -> tuple[str, float, float, float]:
+    """Region and coordinates from `tp`'s arguments: a region name and X Y Z, a SLURL, or a SLURL or name alone."""
+    region, pos = a.region.strip(), (128.0, 128.0, 0.0)
+    if looks_like_slurl(region):
+        where = parse_slurl(region)
+        if where is None:
+            raise Fail(f"not a SLURL of a place: {region} (they look like "
+                       "https://maps.secondlife.com/secondlife/REGION/X/Y/Z)")
+        region, pos = where[0], where[1:]
+    given = [v for v in (a.x, a.y, a.z) if v is not None]
+    if given:
+        if len(given) != 3:
+            raise Fail("give all three of X Y Z, or none")
+        pos = (a.x, a.y, a.z)
+    return region, *pos
+
+
 def tp(ctx: Ctx, a):
     api = ctx.api
-    region = a.region.strip()
+    region, x, y, z = tp_target(a)
     # The viewer's teleport by name asks the map where the region is, and does nothing at all when the map knows
     # no such region: so ask first, and say so.
     if (r := find_region(ctx, region)) is not None:
@@ -373,7 +392,7 @@ def tp(ctx: Ctx, a):
             print(f"({region} is rated {r['region'].get('maturity')}, above this install's maturity setting "
                   f"({caps.get('maturity')}): the grid will likely refuse the teleport)")
     since = api.seq()
-    api.post("LLAgent", "requestTeleport", {"regionname": region, "x": a.x, "y": a.y, "z": a.z,
+    api.post("LLAgent", "requestTeleport", {"regionname": region, "x": x, "y": y, "z": z,
                                             "skip_confirmation": True})
     end = time.time() + 40
     while time.time() < end:

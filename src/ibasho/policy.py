@@ -170,11 +170,12 @@ ALLOWED: dict[str, dict[str, str | None]] = {
         "requestTeleport", "joinGroup", "leaveGroup", "activateGroup", "setHome", "parcel", "people", "friends",
         "names", "upload", "uploadMesh", "wearables", "createWearable", "editWearable", "rebake", "move", "stop",
         "probeGround", "messages")),
-        # a name search like the viewer's avatar picker, reading a profile, reading one of my notecards, and a
-        # region looked up on the map (viewers that have them); my own profile and display name, whatever the
-        # agent chooses to put there
+        # a name search like the viewer's avatar picker, reading a profile, reading one of my notecards, a region
+        # looked up on the map, and the directory's place search, within the person's maturity setting (viewers
+        # that have them); my own profile and display name, whatever the agent chooses to put there
         "findAvatars": "_find_avatars", "profile": "_profile", "readNotecard": "_read_notecard",
-        "findRegion": "_find_region", "setProfile": "_set_profile", "setDisplayName": "_set_display_name"},
+        "findRegion": "_find_region", "findPlaces": "_find_places", "setProfile": "_set_profile",
+        "setDisplayName": "_set_display_name"},
     "IbashoIM": dict.fromkeys(("send", "sessions", "history", "markRead", "leave", "conference")),
     "IbashoObjects": dict.fromkeys(("nearby", "get", "find", "request", "buy", "select", "deselect", "selection")),
     "IbashoBuild": dict.fromkeys(("create", "modify", "duplicate", "rez", "link", "unlink", "take", "delete",
@@ -302,6 +303,9 @@ SNAPSHOT_ARGS = {"op", "filename", "width", "height", "showui", "showhud", "rebu
 SNAPSHOT_TYPES = ("COLOR", "DEPTH")    # anything else stops the viewer
 REGION_NAME = re.compile(r"^[^/\\?#:%&<>\"\x00-\x1f]{1,64}$")
 AVATAR_QUERY = re.compile(r"^[^\x00-\x1f]{1,64}$")   # a name, or part of one, to search for
+PLACE_QUERY = re.compile(r"^[^\x00-\x1f\x7f]{0,100}$")
+PLACE_CATEGORIES = {"any", "linden", "adult", "arts", "store", "educational", "game", "gather", "newcomer", "park",
+                    "home", "shopping", "stage", "other", "rental"}
 UUID = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
@@ -650,6 +654,28 @@ class Policy:
         if not isinstance(name, str) or not REGION_NAME.match(name) or not name.strip():
             return refuse(f"findRegion name {name!r}: a region's name (no / \\ : ? # % &)", rule="arguments")
         return _timeout_check(op, data)
+
+    def _find_places(self, pump: str, op: str, data: dict, notes: dict) -> Verdict | None:
+        q = data.get("query", "")
+        if not isinstance(q, str) or not PLACE_QUERY.match(q):
+            return refuse(f"findPlaces query {q!r}: words on one line, up to 100 characters", rule="arguments")
+        if "category" in data and data["category"] not in PLACE_CATEGORIES:
+            return refuse(f"findPlaces category {data['category']!r}: one of {', '.join(sorted(PLACE_CATEGORIES))}",
+                          rule="arguments")
+        # Always named, so the viewer never falls back to the most the account may enter.
+        m = data.get("maturity")
+        if m not in MATURITY or MATURITY[m] > MATURITY[self.caps.maturity]:
+            return refuse(f"findPlaces maturity {m!r}: general, moderate or adult, at most {self.caps.maturity} "
+                          "(the person's setting)", rule="maturity")
+        if data.get("sort", "traffic") not in ("traffic", "name"):
+            return refuse("findPlaces sort: traffic or name", rule="arguments")
+        st = data.get("start", 0)
+        if not (isinstance(st, int) and not isinstance(st, bool) and 0 <= st <= 100000):
+            return refuse("findPlaces start: a whole number from 0", rule="arguments")
+        lim = data.get("limit", 20)
+        if not (isinstance(lim, int) and not isinstance(lim, bool) and 1 <= lim <= 100):
+            return refuse("findPlaces limit: 1 to 100", rule="arguments")
+        return _timeout_check(op, {k: v for k, v in data.items() if k != "limit"})
 
     def _ui_call(self, pump: str, op: str, data: dict, notes: dict) -> Verdict | None:
         """Menu functions: only choosing my own sky passes, unless the person allows more."""

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Mon, 2 Nov 2026 11:53:40 +0000
-Subject: [PATCH 29/35] Servers: a frame cap, an idle frame rate, no web
+Subject: [PATCH 29/39] Servers: a frame cap, an idle frame rate, no web
  plugin, a texture budget
 
 For running without a graphics card, where Mesa's llvmpipe draws in

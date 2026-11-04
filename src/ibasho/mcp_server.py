@@ -454,9 +454,30 @@ def build(config: str | None = None, bridge=None):
         return await call(context, cmd)
 
     @tool()
-    async def tp(context: Context, region: str, x: float, y: float, z: float):
-        """Teleport to a region at x, y, z; says whether I arrived or was refused."""
-        return await call(context, argv("tp", region, x, y, z))
+    async def tp(context: Context, region: str, x: float | None = None, y: float | None = None,
+                 z: float | None = None):
+        """Teleport to a region at x, y, z (without them, its middle); says whether I arrived or was refused.
+        region: a region's name, or a SLURL (https://maps.secondlife.com/secondlife/REGION/X/Y/Z, secondlife://...)
+        as `places` gives them or a web page shows them, whose coordinates are used."""
+        coords = [x, y, z]
+        if None in coords and any(v is not None for v in coords):
+            raise ToolError("give all three of x, y, z, or none")
+        return await call(context, argv("tp", region, *(float(v) for v in coords if v is not None)))
+
+    @tool(read_only=True)
+    async def places(context: Context, query: str = "*", category: str | None = None,
+                     sort: Literal["relevance", "traffic", "quiet", "name"] = "relevance", guide: bool = False,
+                     page: int = 1):
+        """Search the grid's places: name, region and coordinates with a SLURL for tp, rating, traffic (visits a
+        day) and the owner's description, 20 a page. In world it searches as my account does (Moderate places too,
+        up to the install's maturity setting); before login, and for * or sort "quiet", Second Life's public web
+        search, which shows General places only. query: words (3 letters or more in world), or * for everything
+        (with sort "traffic" or a category: the busiest).
+        category: by name, a word will do (Hangout, Newcomer Friendly...; with guide, Voice Chat Hot Spots, What's
+        Hot Now, Music...); an unknown one lists them. guide: Linden Lab's Destination Guide, picked places, from
+        the web page, instead of all places."""
+        return await call(context, argv("places", *(query.split() or ["*"]), category=category, sort=sort,
+                                        guide=guide, page=page if page > 1 else None))
 
     @tool()
     async def touch(context: Context, object: str, face: int = 0):

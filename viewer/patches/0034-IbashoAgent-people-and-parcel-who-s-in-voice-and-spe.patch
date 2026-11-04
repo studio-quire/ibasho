@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Tue, 3 Nov 2026 11:50:22 +0000
-Subject: [PATCH 34/35] IbashoAgent people and parcel: who's in voice and
+Subject: [PATCH 34/39] IbashoAgent people and parcel: who's in voice and
  speaking
 
 While my own voice chat is connected, people marks the avatars in it

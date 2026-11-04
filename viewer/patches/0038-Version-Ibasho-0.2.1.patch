@@ -1,0 +1,16 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Wed, 4 Nov 2026 01:31:32 +0000
+Subject: [PATCH 38/39] Version: Ibasho 0.2.1
+
+---
+ indra/newview/VIEWER_VERSION.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/indra/newview/VIEWER_VERSION.txt b/indra/newview/VIEWER_VERSION.txt
+index 0ea3a94..0c62199 100644
+--- a/indra/newview/VIEWER_VERSION.txt
++++ b/indra/newview/VIEWER_VERSION.txt
+@@ -1 +1 @@
+-0.2.0
++0.2.1

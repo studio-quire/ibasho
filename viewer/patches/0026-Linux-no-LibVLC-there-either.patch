@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Mon, 2 Nov 2026 11:30:09 +0000
-Subject: [PATCH 26/35] Linux: no LibVLC there either
+Subject: [PATCH 26/39] Linux: no LibVLC there either
 
 The Linux build listed media_plugin_libvlc among the targets its package
 copies, and its manifest shipped the plugin, after patch "No LibVLC"

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Fri, 23 Oct 2026 20:04:56 +0000
-Subject: [PATCH 25/35] Uploads: a negative max_cost allows no fee
+Subject: [PATCH 25/39] Uploads: a negative max_cost allows no fee
 
 upload and uploadMesh take an optional max_cost. A negative one made
 uploadMesh skip that check (its "none given" value), and gave upload a

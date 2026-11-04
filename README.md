@@ -95,6 +95,15 @@ Ibasho's viewer does several things a normal viewer doesn't:
   install's token. Where the machine has no disk id to report, as in a container, the machine id the viewer sends
   Linden Lab at login is a random one made once for the install and kept with its saved login, instead of the
   one value every container would otherwise share. [docs/linux.md](docs/linux.md) has the details.
+- **Place search goes as the account when it's logged in.** `ibasho places` (the MCP tool `places`) asks the
+  grid's own place search through the viewer, as the viewer's search window does, so Linden Lab sees the words
+  searched for and the filters (category, sort, page, the config's maturity rating) from the agent's account.
+  That's what lets it find Moderate places, which most of the busiest are.
+- **The tooling looks a few things up on Linden Lab's websites.** Before login, and for the Destination Guide,
+  `places` reads Second Life's public place search, search.secondlife.com, as a visitor who isn't logged in:
+  what goes out is the same words and filters, with no account, name or login, and it shows General places only.
+  `ibasho walk --region`, with a viewer that can't look regions up itself, asks Linden Lab's map service where
+  the region is. The [privacy policy](docs/privacy.md) lists everything that leaves the machine.
 - **Content:** Ibasho adds no content of its own. The viewer shows whatever the grid shows, up to the maturity
   rating set in the config: Moderate by default, never above what the person sets.
 

@@ -139,7 +139,7 @@ On by default off Windows, in `[server]` (all commented out in the template, wit
 | `max_fps`, `idle_fps`, `idle_after` | 15, 2, 5 s | the frame rate, and the rate after `idle_after` seconds without a request (not while walking or teleporting) |
 | `web` | false | the viewer's web browser (web pages, web floaters, web media on prims): about 0.5 GB and a third of the frame rate |
 | `voice` | false | voice chat; heard only if hearing's `voice_device` says so ([hearing.md](hearing.md#voice-chat)) |
-| `texture_budget_mb` | 512 | texture memory, as the viewer counts it; 0 = the viewer's own, which grows with what it sees. Busy Second Life regions go past it (2-2.6 GB in one; below) |
+| `texture_budget_mb` | 512 | texture memory, as the viewer counts it; 0 = the viewer's own, which grows with what it sees. While it's set, avatars' bakes and your own avatar's textures are held to 512 pixels and the world's to `max_texture_size`. Busy Second Life regions still go past it (below) |
 | `max_texture_size` | 1024 | 512, 1024 or 2048 |
 | `trim_memory` | 60 | seconds: how often the viewer hands memory it has freed back to the system; 0 = never |
 | `draw_distance` | 64 | metres |
@@ -160,10 +160,17 @@ corner after the crowded region): memory it freed stayed with it for reuse. Sinc
 glibc's `MALLOC_MMAP_THRESHOLD_` fixed at 128 KB, so textures and meshes are mapped on their own and go back to the
 system when freed, and the viewer trims the rest every `trim_memory` seconds. On the test grid, a viewer that grew
 to 1.9 GB among 320 textures kept all of it after leaving; with the threshold it peaked at 1.6 GB and was back to
-0.9 GB within a minute. **Why busy Second Life regions pass the texture budget** isn't settled: on the test grid
-the 512 MB budget held (578 MB by the viewer's count) with 320 different textures close round the avatar, so it
-isn't simply many textures in view; what a Second Life crowd adds (mesh avatars and their attachments, materials'
-extra maps, 19,000 objects) wasn't there. Size for 8 GB where it's busy.
+0.9 GB within a minute.
+
+**Busy Second Life regions and the texture budget.** Avatars on Second Life wear 2048-pixel bakes (the textures
+their skin and system clothes are drawn with), and the viewer kept every one of them whole: in a crowded region
+37 of them were half its texture memory, and the budget was passed four- to sixfold. Since 0.2.1, while the
+budget is set, bakes and your own avatar's textures are held to 512 pixels and the world's to `max_texture_size`;
+avatars look the same at the window's size. In the same region with as many people, the viewer's textures then
+took about half the memory (120-150 bakes 76-105 MB, where 37 had taken 790) and the viewer about a gigabyte less
+(3.0-3.7 GB). The budget still isn't reached there: it also counts the region's vertex buffers (a few hundred MB
+in a crowd), and the world's textures stop at the smallest size the viewer will draw them at. Size for 8 GB where
+it's busy.
 
 ## Not there yet on Linux
 

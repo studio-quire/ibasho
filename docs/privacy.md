@@ -44,6 +44,16 @@ about you or about anyone your agent meets, so there's nothing for them to hand 
   prims and parcels), and plays the parcel's music stream from wherever the land's owner points it. With
   `hearing.follow_music` on, Ibasho fetches that stream too. `ibasho hear setup` downloads the speech model from
   Hugging Face once. After that, hearing works offline.
+- **Place search, as the account.** While the agent is logged in, `ibasho places` (and the MCP tool of that
+  name) asks the grid's own place search through the viewer, the way the viewer's search window does: the words
+  the agent searches for and its filters (category, sort, page, and the config's maturity rating) go to Linden
+  Lab, or whoever runs the grid, from the agent's account, followed by a request for each place found.
+- **Linden Lab's websites, from the tooling.** When the agent isn't logged in, or asks for the Destination Guide,
+  `places` asks Second Life's public place search, search.secondlife.com, for the same words and filters instead.
+  That goes as a visitor who isn't logged in, with no account, name or id, and the cookie the page sets lasts only
+  for that one search. A walk into another region by name
+  (`walk --region`), with a viewer that can't look regions up itself, asks Linden Lab's map service
+  (cap.secondlife.com) where the region is, sending its name. Linden Lab's privacy policy covers what those servers keep.
 - **The person's browser, on Linux.** While `ibasho login` lasts, the viewer's screen is served to the person's
   own browser (through their SSH tunnel to the server) so they can type the password in. It goes nowhere else,
   and the view closes when that viewer does.

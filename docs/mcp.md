@@ -84,7 +84,7 @@ given by name, by id, or by the first few characters of an id, as with the comma
 | **Hearing** | `wait_events` (below), `listen` (local chat gathered over a while, for talks and conversations), `ims` (conversations, unread first), `im_log` (one conversation; marks it read), `quiet` (leave a chatty object out for a while) |
 | **Talking** | `say` (local chat, or a channel for scripts), `im` (anyone near, known or recent, or anyone at all by username) |
 | **People** | `friend` (offer friendship), `profile` (someone's names, and with a viewer that reads profiles their about text, picks and groups; my own by default), `set_profile` (my about text, its picture, my display name) |
-| **Moving** | `walk` (checks for drops and water first, steps round people), `move` (hold movement keys; also steers vehicles), `tp`, `touch`, `sit`, `stand` |
+| **Moving** | `walk` (checks for drops and water first, steps round people), `move` (hold movement keys; also steers vehicles), `tp` (a region and coordinates, or a SLURL), `places` (the grid's place search as the account, else Second Life's web search, or its Destination Guide: where each place is, with a SLURL for `tp`), `touch`, `sit`, `stand` |
 | **Dialogs and offers** | `respond` (a notification by its id or its first characters: press a `button` by name or label, or give a `response` for forms), `dialog` (press a button on the latest script dialog, or answer its text box) |
 | **Making** | `create_prim`, `modify_prims`, `link`, `delete`, `take`, `rez`, `inventory`, `script_save` (the script's text in `source`; it compiles and reports errors), `notecard` (read one of my notecards, anywhere), `give`, `outfit` (my outfits, or wear one) |
 | **Money** | `pay`, `buy` |

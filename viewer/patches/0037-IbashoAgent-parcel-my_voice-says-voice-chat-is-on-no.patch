@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Wed, 4 Nov 2026 01:31:27 +0000
+Subject: [PATCH 37/39] IbashoAgent parcel: my_voice says voice chat is on, not
+ that it has connected
+
+It reads isVoiceWorking, which was true on a region without voice (Second Life, 2026-11-03).
+---
+ indra/newview/ibashoagent.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/indra/newview/ibashoagent.cpp b/indra/newview/ibashoagent.cpp
+index 2dfe7b2..c38d335 100644
+--- a/indra/newview/ibashoagent.cpp
++++ b/indra/newview/ibashoagent.cpp
+@@ -1004,7 +1004,7 @@ public:
+             &IbashoAgentListener::setHome);
+         add("parcel",
+             "Reply with the current parcel and region: name, desc, owner, area, flags, music/media, rights;\n"
+-            "my_voice: whether my own voice chat is connected (the parcel's \"voice\" right says if it's allowed).",
++            "my_voice: whether my own voice chat is on, not that it has connected here (the parcel's \"voice\" right says if it's allowed).",
+             &IbashoAgentListener::parcel,
+             llsd::map("reply", LLSD()));
+         add("people",

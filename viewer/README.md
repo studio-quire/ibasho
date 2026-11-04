@@ -73,9 +73,9 @@ names, for a container build made for some machine). `.github/workflows/viewer-l
 
 ### Version
 
-Ibasho numbers its releases itself: `indra/newview/VIEWER_VERSION.txt` holds MAJOR.MINOR.PATCH (`0.2.0`), and
+Ibasho numbers its releases itself: `indra/newview/VIEWER_VERSION.txt` holds MAJOR.MINOR.PATCH (`0.2.1`), and
 `configure.sh` sets the fourth part, the build number, to the number of commits in the Ibasho series on top
-of `BASE` (25 for the first release, `0.1.0.25`; 35 for `0.2.0.35`). Every change to the series, published or local, gives a
+of `BASE` (25 for the first release, `0.1.0.25`; 35 for `0.2.0.35`; 39 for `0.2.1.39`). Every change to the series, published or local, gives a
 different version, and the channel name "Ibasho" tells it apart from any Linden Lab viewer. Linden Lab's own
 version of the base (26.4.0) is named in About. Re-run `configure.sh` before a release build so the number is
 current; `build.ps1` warns if the tree has moved on since.
@@ -176,7 +176,7 @@ Ibasho sets them on the command line or over LEAP ([docs/linux.md](../docs/linux
 | `IbashoIdleFPS` | 0 | the cap while no LEAP plugin has sent a request for `IbashoIdleAfter` seconds (after login, not on autopilot or teleporting); the first request after a quiet spell waits up to one idle frame |
 | `IbashoIdleAfter` | 5 | seconds |
 | `IbashoNoWebPlugin` | off | no web (CEF) plugin starts and no web floaters are preloaded; set it on the command line |
-| `IbashoTextureBudget` | 0 | the texture budget in MB, held as given; 0 = the viewer's own, from the video memory, which software rendering reports as all of the system's |
+| `IbashoTextureBudget` | 0 | the texture budget in MB, held as given; 0 = the viewer's own, from the video memory, which software rendering reports as all of the system's. While it's set, avatar bakes and your own avatar's textures are held to 512 and the world's to `RenderMaxTextureResolution`, whatever else asks for more (Second Life's 2048 bakes otherwise stay whole) |
 | `IbashoTrimMemory` | 0 | Linux: every this many seconds, memory the viewer has freed goes back to the system (`malloc_trim`), so it shrinks again after a busy place; 0 = never |
 
 ### The built-in browser
@@ -330,6 +330,25 @@ Money, giving, attachments, offers, groups, places and people:
   General, 21 Moderate, 42 Adult), `maturity` its name; `name` as the map spells it. `similar`: the other
   regions the search turned up. `{error}` if the map doesn't answer in time. (The viewer's teleport by region
   name asks the map the same way, and does nothing when the map knows no such region.)
+- `findPlaces {query, category=any, maturity, sort=traffic, start=0, limit=20, timeout=20}` -> `{places: [{id, name,
+  traffic, for_sale, region?, pos?, global?, rating?, description?, area?}], more, maturity}`: places searched as
+  the directory's Places tab searches them (`DirPlacesQuery`), so with the account's own maturity access, where
+  Second Life's web search shows a visitor General places only. `query`: words to find (Second Life wants 3
+  letters or more, and refuses `""`, category or not); `category`: a parcel category by its internal name (`linden`, `arts`,
+  `store`, `educational`, `game`, `gather`, `newcomer`, `park`, `home`, `shopping`, `stage`, `other`, `rental`,
+  `adult`); `maturity`: the most to include (`general`, `moderate`, `adult`), never more than the account may
+  enter; `sort`: `traffic` (busiest first) or `name` (then Second Life sends every place's traffic as 0; it
+  has no quietest-first, sending the busiest whatever the order). Each place on the page is then asked for as its
+  place profile asks (`ParcelInfoRequest`): `region`, `pos` (in the region), `global`, `rating`, `description`
+  (the owner's text) and `area`; a place whose details don't come within a few seconds has only its name and
+  traffic. `more`: there are results past this page. A reply stays within a hundred from a multiple of 100, as
+  the grid sends them. `{error}` if the grid's search doesn't answer in time (OpenSim answers only with a search
+  module) or refuses the words.
+- `textureStats {top=15}` -> `{gl_texture_mb, vertex_mb, budget_mb, free_budget_mb, discard_bias,
+  system_memory_low, by_boost: {LEVEL: {count, mb, raw_mb, raw_count, faceless, on_screen, sizes}}, fetched_mb,
+  fetched_count, biggest: [{id, boost, type, full, side, discard, desired, faces, on_screen, vsize, mb}]}`:
+  where texture memory goes, for a budget that doesn't hold. MB are real bytes at each texture's current
+  discard level (the budget counts about twice that); `top` is at most 200.
 
 Uploads and wearables:
 
@@ -459,6 +478,7 @@ Each changed file says so in its header (what, and when) and marks the changed l
 | `llfloateravatarpicker.cpp` | hook: `AvatarPickerReply` messages answering a `findAvatars` search go there, not to the picker |
 | `llavatarpropertiesprocessor.cpp` | hooks: `AvatarGroupsReply` and `AvatarPicksReply` (otherwise ignored) fill in `profile` on grids without the `AgentProfile` capability |
 | `llworldmapmessage.cpp` | hook: map blocks also go to `findRegion` |
+| `llpaneldirbrowser.cpp` | hook: `DirPlacesReply` messages answering a `findPlaces` search go there, not to the directory's panels |
 | `pipeline.cpp`, `lldrawpoolavatar.cpp`, `llhudobject.cpp`, `llvopartgroup.cpp`, `lldrawpoolalpha.cpp`, `llspatialpartition.cpp` | `hideAvatars`: the few places avatars, their attachment groups, lights, particles and name tags are drawn ask whether to skip them |
 | `app_settings/settings.xml` | `IbashoMaxPayment`, `IbashoMaxSessionSpend`, `IbashoMaxUploadCost`, `IbashoSpectator`, `IbashoNoActivate`, `IbashoMaxMessagesPerDay`, `IbashoAllowLandBuy`, `IbashoAllowCurrencyBuy` |
 | `app_settings/settings_per_account.xml` | chat and IM transcripts off by default |
@@ -468,7 +488,7 @@ Each changed file says so in its header (what, and when) and marks the changed l
 | `llpanellogin.cpp`, `panel_login.xml` | the viewer's name and version on the login screen |
 | `strings.xml` (en; translations drop their overrides), `floater_about.xml` (likewise) | the app name "Ibasho"; About credits Linden Lab's viewer as the base, says who doesn't support it, drops the Havok, Kakadu and Siren14 lines |
 | `res/viewerRes.rc`, `viewer_manifest.py` | the executable `IbashoViewer.exe`, version resources, installer name |
-| `VIEWER_VERSION.txt` | `0.2.0` |
+| `VIEWER_VERSION.txt` | `0.2.1` |
 | `llversioninfo.cpp` | the Ibasho channel counts as a release channel (the menu bar's normal colour) |
 | `llappviewer.cpp`, `settings.xml`, `panel_preferences_setup.xml`, `notifications.xml` (en; translations drop their override), `viewer_manifest.py` | no update checks (Linden Lab's update service isn't asked), no release notes popping up, no update settings, a grid asking for a newer viewer doesn't point to Linden Lab's download; `build_data.json` names Ibasho and no update service |
 | `settings.xml` (`ReportBugURL`), `menu_viewer.xml`, `strings.xml` | Help > Report Bug opens Ibasho's issue tracker; Linden Lab's bug-reporting links gone; freeze and missing-file messages don't send people to Linden Lab's support |
@@ -476,7 +496,7 @@ Each changed file says so in its header (what, and when) and marks the changed l
 | `licenses-win32.txt`, `scripts/packages-formatter.py` | `licenses.txt` only for what ships (OpenJPEG in, Kakadu and five others out; OpenAL Soft and freealut with where their source is); About > Licenses says Linden Lab's copyright is for the base viewer |
 | icons and logos | `icons/test`, `res/*.ico`, installer icons, the login logos, the system-message badge, the place-link icon, the system folder icons, the map placeholder and the home tab icon are Ibasho's own artwork ([`art/make_art.py`](art/make_art.py)), recorded in `doc/LICENSE-logos.txt`; no image of Linden Lab's marks is left in the build |
 | `newview/CMakeLists.txt`, `viewer_manifest.py`, `licenses-linux.txt`, `linux_tools/ibasho-viewer.sh` | Linux: no LibVLC or example plugin; the package starts with `ibasho-viewer` and has `bin/ibasho-viewer-bin`, without Linden Lab's desktop integration; `licenses.txt` as on Windows, plus SDL3 |
-| `llcommon/llleap.cpp`, `llleap.h`, `llappviewer.cpp`, `llviewermedia.cpp`, `llviewerwindow.cpp`, `llviewertexture.cpp` | servers: when a LEAP plugin last asked something; the frame rate cap and its idle rate; no web plugin and no preloaded web floaters; the texture budget (`ibashoserver.cpp` holds the rest, and gives freed memory back) |
+| `llcommon/llleap.cpp`, `llleap.h`, `llappviewer.cpp`, `llviewermedia.cpp`, `llviewerwindow.cpp`, `llviewertexture.cpp` | servers: when a LEAP plugin last asked something; the frame rate cap and its idle rate; no web plugin and no preloaded web floaters; the texture budget, and the size limits that hold within it, bakes included (`ibashoserver.cpp` holds the rest, gives freed memory back, and answers `textureStats`) |
 | `llappviewerlinux.cpp` | Linux: where the disks give no id (a container), the serial number Linden Lab sees comes from an id of the install's own (`install_id` in the settings folder, made at random once) rather than from nothing, which every such install would share |
 
 New files, all under the LGPL 2.1: `ibashohooks.h`, `ibashocommon.{h,cpp}`, `ibashoim.cpp`, `ibashoobjects.cpp`, `ibasholimits.cpp`,
@@ -521,6 +541,10 @@ New files, all under the LGPL 2.1: `ibashohooks.h`, `ibashocommon.{h,cpp}`, `iba
 | 33 | Servers: memory given back after a busy place (IbashoTrimMemory) |
 | 34 | IbashoAgent people and parcel: who's in voice and speaking |
 | 35 | Version: Ibasho 0.2.0 |
+| 36 | Servers: avatar bakes held to 512 within the texture budget; IbashoAgent textureStats |
+| 37 | IbashoAgent parcel: my_voice says voice chat is on, not that it has connected |
+| 38 | Version: Ibasho 0.2.1 |
+| 39 | IbashoAgent findPlaces: place search as the directory does it, with the account's maturity access |
 
 ## License and trademarks
 

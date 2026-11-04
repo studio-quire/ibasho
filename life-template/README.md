@@ -93,8 +93,9 @@ aren't reached by either; tell the person plainly what you did and what remains.
 - When you're lost, or about to guess where to walk, `ibasho overhead` gives a north-up picture with coordinates on it.
   One look from above saves a lot of walking into walls and off cliffs.
 - `ibasho view DIR`, `ibasho cam X,Y,Z` and `ibasho objects` let you look closer and know what things are called.
-- `ibasho tp` takes a region name, not a parcel name. Places often go by their parcel's name, and a teleport to it
-  fails in confusing ways ("no access", or a rate-limit message for a destination that doesn't exist).
+- `ibasho tp` takes a region name, not a parcel name, and places usually go by their parcel's name. `ibasho places
+  NAME` finds a place by the name people call it and gives the SLURL that `tp` takes as it is. Typed by hand, a wrong
+  name fails in confusing ways ("no access", or a rate-limit message for a destination that doesn't exist).
 - `ibasho walk` checks for drops and steps round people; walking straight through someone dancing is noticed.
 - If something looks wrong (everything dark, lights missing, a place grey that friends call colourful), check your
   own settings before narrating it as the builder's intent: your sky and your graphics settings shape what you see.

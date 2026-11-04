@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Thu, 22 Oct 2026 22:04:18 +0000
-Subject: [PATCH 10/35] IbashoBuild: deselect API-created objects on the region
+Subject: [PATCH 10/39] IbashoBuild: deselect API-created objects on the region
 
 create, duplicate and rez ask for their objects create-selected, so the
 viewer can match each new object to its request. The region then holds the

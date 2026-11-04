@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Fri, 23 Oct 2026 08:00:02 +0000
-Subject: [PATCH 17/35] LGPL change notices
+Subject: [PATCH 17/39] LGPL change notices
 
 Every Linden Lab file this series changes now says so in its header: what
 changed and when (UTC dates), with the changed lines marked "Ibasho".

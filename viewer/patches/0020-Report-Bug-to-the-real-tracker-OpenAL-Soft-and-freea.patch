@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Fri, 23 Oct 2026 01:33:44 +0000
-Subject: [PATCH 20/35] Report Bug to the real tracker; OpenAL Soft and
+Subject: [PATCH 20/39] Report Bug to the real tracker; OpenAL Soft and
  freealut in licenses.txt
 
 ReportBugURL points at https://github.com/Shoalstone/ibasho/issues (it was a

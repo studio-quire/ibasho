@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: "Claude Opus 5.5" <noreply@anthropic.com>
 Date: Fri, 23 Oct 2026 07:55:49 +0000
-Subject: [PATCH 21/35] Built-in browser: no files, no pages on this machine or
+Subject: [PATCH 21/39] Built-in browser: no files, no pages on this machine or
  its network
 
 The web and media floaters, prim and parcel media and parcel music all

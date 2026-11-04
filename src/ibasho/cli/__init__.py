@@ -10,14 +10,14 @@ import traceback
 from .. import __version__
 from .. import config as config_mod
 from ..api import ApiError, Down
-from . import act, ears, hear, lifecycle, low, make, money, see, viewer
+from . import act, ears, find, hear, lifecycle, low, make, money, see, viewer
 from .common import Ctx, Fail, in_session, stdout_utf8
 from .. import mcp_server, recall
 from ..keeper import cli as keeper
 from ..tools import cli as tools
 
 GROUPS = [
-    ("lifecycle", lifecycle), ("viewer", viewer), ("seeing", see), ("hearing", hear), ("ears", ears), ("acting", act),
+    ("lifecycle", lifecycle), ("viewer", viewer), ("seeing", see), ("hearing", hear), ("ears", ears), ("acting", act), ("finding", find),
     ("making", make), ("money", money), ("keeper", keeper), ("memory", recall), ("tools", tools),
     ("low level", low), ("mcp", mcp_server),
 ]
